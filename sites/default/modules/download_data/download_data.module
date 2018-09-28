@@ -1,0 +1,74 @@
+<?php 
+include("downloadclass.php");
+function download_data_menu() {
+  $items = array();
+
+$items['data/download/%'] = array(
+    'title' => 'Download data',
+    'page callback' => 'download_data_toCSV',
+    'access callback' => TRUE, 
+    'page arguments' =>  array(2),
+  );
+     
+  return $items;
+}
+function download_data_toCSV($parameter='') {
+ob_end_clean();
+ob_start();
+
+
+
+
+$download=new downloadclass();
+
+
+$downloadid = is_numeric($parameter) && strlen($parameter) < 3 ? $parameter : '';
+$record = $download->get_Download($downloadid);
+
+
+
+
+
+		
+
+
+
+
+header("Pragma: cache");
+header("Content-Type: text/comma-separated-values");
+header('Content-Disposition: attachment; filename="' . $record["downloadFile"] .'"');
+
+ob_end_flush();
+
+$query = "SELECT * from `" . $record["tablename"] . "`";
+$results = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+$rowcounter = db_query($query)->rowCount();
+ if ($rowcounter > 0 ) {
+	//if we have results, print out the column headings
+	$fields = $download->get_table_columns_array($record["tablename"]);
+	for ($i =0; $i < count($fields) ; $i++) {
+		echo $fields[$i];
+		if ( ($i +1) != count($fields)) {
+			echo ",";
+		}
+	}
+	echo "\n";
+} 
+for ($result=0; $result < $rowcounter; $result = $result + 1){
+$numerical = array_values($results[$result]);
+for ($field = 0; $field < count($numerical); $field++) {
+echo $numerical[$field];
+		if ( ($field +1) != count($numerical)) {
+			echo ",";
+		}
+
+
+
+	} 
+	if ( ($result +1) !=  $rowcounter) {
+			echo "\n";
+	}
+   }
+   
+   }
+ ob_end_clean();

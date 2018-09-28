@@ -1,0 +1,245 @@
+/**
+ * This file should get overwritten if Method 1 is used. If Method 2 is chosen,
+ * remove this comment and start adding your styles to this file.
+ */
+#admin-menu, #admin-menu .dropdown { z-index: 5000; }
+
+body{  background: url(../img/US_Map.png) no-repeat center center fixed; 
+  -webkit-background-size: cover;
+  -moz-background-size: cover;
+  -o-background-size: cover;
+  background-size: cover;}
+  
+  @font-face {
+      font-family: 'fira_sansmedium';
+      src: url('../fira_sans/firasans-medium-webfont.eot');
+      src: url('../fira_sans/firasans-medium-webfont.eot?#iefix') format('embedded-opentype'),
+           url('../fira_sans/firasans-medium-webfont.woff') format('woff'),
+           url('../fira_sans/firasans-medium-webfont.ttf') format('truetype'),
+           url('../fira_sans/firasans-medium-webfont.svg#fira_sansmedium') format('svg');
+      font-weight: normal;
+      font-style: normal;
+
+  }
+
+
+
+
+  @font-face {
+      font-family: 'fira_sansbold';
+      src: url('../fira_sans/firasans-bold-webfont.eot');
+      src: url('../fira_sans/firasans-bold-webfont.eot?#iefix') format('embedded-opentype'),
+           url('../fira_sans/firasans-bold-webfont.woff') format('woff'),
+           url('../fira_sans/firasans-bold-webfont.ttf') format('truetype'),
+           url('../fira_sans/firasans-bold-webfont.svg#fira_sansbold') format('svg');
+      font-weight: normal;
+      font-style: normal;
+
+  }
+
+
+
+
+  @font-face {
+      font-family: 'fira_sanslight';
+      src: url('../fira_sans/firasans-light-webfont.eot');
+      src: url('../fira_sans/firasans-light-webfont.eot?#iefix') format('embedded-opentype'),
+           url('../fira_sans/firasans-light-webfont.woff') format('woff'),
+           url('../fira_sans/firasans-light-webfont.ttf') format('truetype'),
+           url('../fira_sans/firasans-light-webfont.svg#fira_sanslight') format('svg');
+      font-weight: normal;
+      font-style: normal;
+
+  }
+  .main-container h1, .main-container .h1 { font-size: 1.8em;  font-family: 'fira_sansmedium', sans-serif; color: #333;}
+   .main-container h2, .main-container .h2 { font-size: 1.6em;  font-family: 'fira_sansmedium', sans-serif; color: #333;}
+    .main-container h3, .main-container .h3 { font-size: 1.4em;  font-family: 'fira_sansmedium', sans-serif; color: #333; }
+  .main-container{ background-image: url(../img/transpBlue10.png); padding: 0 10em 0 10em; }
+.front  .main-container h1.page-header { color: #5D9732; background-image: url('../img/sd_logo.png'); background-repeat: no-repeat; padding-left: 108px; height: 71px; line-height: 71px; margin-top: 20px; width: 290px; border-bottom: none; float: left;}
+.headFront {width: 933px; }
+.tagBox {width: 640px; height: 88px; float: left; margin-top: 14px; border: 1px solid #5D9732;
+-moz-border-radius: 8px;
+-webkit-border-radius: 8px;
+border-radius: 8px; 
+ background:#fff;
+  background:rgba(255,255,255,0.3);
+}}
+.front .col-sm-12 { overflow: visible; } 
+.tagBox p {padding: 8px 8px 8px 10px; font-family:Helvetica,Arial,sans-serif; font-size: 1em;}
+.main-container h3 a {color: #333; }
+.navbar-inverse .navbar-nav > li > a:hover {
+    color: #E1EEF7;
+}
+.navbar-inverse .navbar-nav > li > a {
+    color: #fff;
+}
+.navbar-inverse {
+    background-color: #3784B4;
+    border-color: #080808;
+}
+.navbar-fixed-top {
+    border-width: 0 0 1px;
+    top: 0;
+}
+
+.jumbotron h1{font-size: 1em;}
+.lined {border-right: 1px darkgrey solid;}
+.linedL {border-left: 1px darkgrey solid;}
+  
+.jumbotron  { 
+ 
+}
+.name{background: url(../img/statedatalogo_sm.png) no-repeat; padding-left: 60px;}
+
+.navbar-inverse .navbar-brand {
+    color: #d6d6d6;
+}
+footer .col-md-6.cContact {  background:rgba(255,255,255,0.6); }
+ul.nav a:hover { background-color: #388DC1 !important; }
+
+ul.nav a.active { background-color: #388DC1 !important; }
+
+
+footer  { 
+
+}
+.hideit {
+    left: -9999px !important;
+    position: absolute !important;
+    top: -9999px !important;
+}
+g.tooltip {
+    display: block;
+    font-size: 12px;
+    line-height: 1.4;
+    opacity: 1;
+    position: absolute;
+    visibility: visible;
+    z-index: 1030;
+}
+#chartOne { margin: 0 auto;}
+.stateTable .rowOne { border-top: 1px solid black;}
+.stateTable tr {  border-bottom: 1px solid black; }
+.stateTable .colFig { width: 95px; }
+#chartTwo { margin-bottom: 15px; }
+.stateTable .colTh { width: 355px; }
+.stateTable .Nat {  border-left: 2px solid black; padding-left: 6px;}
+#ctools-jump-menu--2 { width: 465px; }
+.rightcell {text-align: center; }
+#stateDropdown { width: 300px; float: right; }
+.aboutData th, .aboutData td {padding: 6px; }
+/* .col-sm-12 .container .col-md-6 {width: 40%; position: relative; } */
+ .col-sm-12 .jumbotron .container { width: 100%; }
+     .col-md-6 h4 a, h2[property="dc:title"] a { color: #000; }
+     .aboutData caption {font-size: 1.2em; font-weight: bold; }
+     #formRedo {display: none; }
+     /* table styles from old site */
+     .page-node-55 field-item.even { overflow: visible; }
+     table.aboutData {position: relative; width: 1075px; max-width: 1075px; margin-left: -80px; }
+     table.aboutData ul { margin-left: 8px; padding-left: 2px; }
+     .container-inline button {margin-top: 7px; }
+     table.dataGrid{
+      font-size: 95%;
+      font-family: 'Lucida Grande', Helvetica, verdana, sans-serif;
+      background-color:#fff;
+      border-collapse: collapse;
+      width: 100%;
+      line-height: 1.2em;
+     }
+     caption {
+      border:1px grey solid;
+      font-weight: bold;
+      color: #002084;
+      text-align: left;
+      padding: 10px 0px 0px 10px;
+      margin-bottom: 2px;
+      text-transform: capitalize;
+     }
+     table.dataGrid thead th {
+      border-right: 2px solid #fff;
+      color:#fff;
+      text-align:center;
+      padding:2px;
+      height:25px;
+      background-color: #004080;
+     }
+     table.dataGrid tfoot {
+      color:#002084;
+      padding:2px;
+      text-transform:uppercase;
+      font-size:1.2em; 
+      font-weigth: bold;
+      margin-top:6px;
+      border-top: 6px solid #004080;
+      border-bottom: 6px solid #004080;
+     }
+     table.dataGrid tbody tr {
+      background-color:#fff;
+      border-bottom: 2px solid #c0c0c0;
+     }
+     table.dataGrid tbody td {
+      color:#002084;
+      padding:5px;
+      text-align:left;
+     }
+     table.dataGrid tbody th {
+      text-align:left;
+      padding: 2px;
+     }
+     table.dataGrid tbody td a, table.dataGrid tbody th a {
+      color:#002084;
+      text-decoration:underline;
+      font-weight:normal; 
+     }
+     table.dataGrid tbody td a:hover, tbody th a:hover {
+      text-decoration:none;
+     }
+     table.data td {
+     margin:0px;
+     border: 1px #A9A9A9 solid;
+     text-align:left;
+     	}
+	
+     table.dmrdata td {
+     margin:0px;
+     font-size: 11px;
+     padding:1px;	
+     line-height: 18px;
+     	}
+		
+     	table.data tr {
+     margin:0px;
+     padding:0px;
+     	}
+	
+     	table.data th{
+     border: 2px #A9A9A9 solid;
+     color:white;
+     		background-color:#0064A1;
+     	}
+	
+     	table.data {
+     border: 3px silver solid;
+     	}
+     #edit-jump--2, #edit-jump {width: 80%; }
+	  .callout {
+	      -moz-border-bottom-colors: none;
+	      -moz-border-left-colors: none;
+	      -moz-border-right-colors: none;
+	      -moz-border-top-colors: none;
+		
+		   background:rgb(255,255,255);  
+		      background: transparent\9;  
+		      background:rgba(255,255,255,0.3);  
+		      filter:progid:DXImageTransform.Microsoft.gradient(startColorstr=#66000000,endColorstr=#66000000);  
+		      zoom: 1;  
+	      border-color: #069;
+	      border-image: none;
+	      border-right: 1px solid #069;
+	      border-style: solid;
+	      border-width: 7px 1px 1px;
+	      margin: 1.5em 3em;
+	      padding: 0.5em;
+	  }
+    .printHeader { display: none; }
+         .field-items .container { width: 100%; }

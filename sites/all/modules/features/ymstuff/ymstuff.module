@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the ymStuff feature.
+ */
+
+include_once 'ymstuff.features.inc';

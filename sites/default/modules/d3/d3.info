@@ -1,0 +1,12 @@
+name = D3 
+description = An API for creating visualizations from D3 libraries
+core = 7.x
+dependencies[] = libraries (>=2.0)
+package = Visualization
+
+; Information added by drupal.org packaging script on 2013-09-04
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "d3"
+datestamp = "1378299063"
+

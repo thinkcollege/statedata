@@ -1,0 +1,9 @@
+name = D3 Statedata
+description = Chart generator for the Statedata.info website
+dependencies[] = d3
+package = Visualization
+core = 7.x
+version = "7.x-1.x-dev"
+project = "d3"
+datestamp = "1378213533"
+

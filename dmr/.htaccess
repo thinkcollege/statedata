@@ -1,0 +1,6 @@
+AuthUserFile /home/statedata/statedata.info/htdocs/dmr/.htpasswd
+AuthGroupFile /dev/null
+AuthName "DMR Data"
+AuthType Basic
+
+require valid-user

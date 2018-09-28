@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the copy_statedata feature.
+ */
+
+include_once 'copy_statedata.features.inc';

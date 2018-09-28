@@ -1,0 +1,10 @@
+name = Clickpath
+description = "Saves and displays the user's most recently visited links in the site."
+core = 7.x
+files[] = clickpath.module
+; Information added by drupal.org packaging script on 2011-02-25
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "clickpath"
+datestamp = "1298618974"
+

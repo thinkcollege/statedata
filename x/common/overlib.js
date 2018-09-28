@@ -1,0 +1,45 @@
+/**
+ *	overLIB 3.50  --  This notice must remain untouched at all times.
+ *	Copyright Erik Bosrup 1998-2001. All rights reserved.
+ *
+ *	By Erik Bosrup (erik@bosrup.com).  Last modified 2001-08-28.
+ *	Portions by Dan Steinman (dansteinman.com). Additions by other people are
+ *	listed on the overLIB homepage.
+ *
+ *	Get the latest version at http://www.bosrup.com/web/overlib
+ *
+ *	This script is published under an open source license. Please read the license
+ *	agreement online at: http:
+ *	www.bosrup.com/web/overlib/license.html
+ *	If you have questions regarding the license please contact erik@bosrup.com.
+ *
+ *	This script library was originally created for personal use. By request it has
+ *	later been made public. This is free software. Do not sell this as your own
+ *	work, or remove this copyright notice. For full details on copying or changing
+ *	this script please read the license agreement at the link above.
+ *
+ *	Please give credit on sites that use overLIB and submit changes of the script
+ *	so other people can use them as well. This script is free to use, don't abuse.
+ *
+ *	THIS IS A VERY MODIFIED VERSION. DO NOT EDIT OR PUBLISH. GET THE ORIGINAL!
+ */
+function b(a){var c=window.onload;window.onload=typeof window.onload!="function"?a:function(){c();a()}}window.AddLoadEvent=b;window.noPopUp=e;window.showPopUp=f;window.getFormattedText=g;window.pixelHeight=pixelHeight;window.pixelWidth=pixelWidth;window.hidePopUp=i;window.getPageLeft=l;window.getPageTop=m;window.overLib=n;window.getSimpleContext=o;window.goTo=p;window.findFrame=q;window.plaseLayer=plaseLayer;window.mouseMove=r;display=s;window.compatibleframe=t;window.layerWrite=u;
+window.showObject=v;window.hideObject=w;window.repositionTo=x;window.PopUpProperties=y;window.MakeDivs=z;function e(){return ver3fix}
+function f(){var a=arguments,c=A.x,d=A.y;A=new y(a[B]);A.x=c;A.y=d;c=a[C];d=a[D];if(d!=null&&typeof d!="undefined"&&d.length>0)A.text=d;d=a[E];var j=a[F];if(d!=null&&typeof d!="undefined"&&d>-100&&j!=null&&typeof j!="undefined"&&j>-100){G=H?document.images[c]:document.getElementById(c);if(G!=null){I=G.offsetWidth;J=G.offsetHeight;K=l(G);L=m(G);A.g=d+K;A.h=j+L;A.c=0;A.d=0;A.a=1}}c=a[M];a=a[N];if(c!=null&&typeof c!="undefined"&&c.length>0){A.url=c;if(a!=null&&typeof a!="undefined"&&a.length>0)A.target=
+a}A.k-=3;a=g();var h;if(H){h=document.hdiv;h.document.open();h.document.write(a);h.document.close();h=h.document.width+6}else if(O){h=P.A;h.innerHTML=a;h=h.offsetWidth+6}else if(Q){h=$("hdiv");h.innerHTML=a;h=h.offsetWidth+6}h=h;if(A.width>h)A.width=h;var k;if(H){k=document.hdiv;k.document.open();k.document.write(a);k.document.close();k=k.document.height}else if(O){k=P.A;k.innerHTML=a;k=k.offsetHeight}else if(Q){k=P.document.getElementById("hdiv");k.innerHTML=a;k=k.offsetHeight}A.height=k;if(A.width>
+I){A.width=I;A.x=0}if(A.height>J){A.height=J;A.y=0}if(H||O||Q){P=R;if(H)S=P.document.v;if(O)S=P.v.style;if(Q)S=P.document.getElementById("overDiv")}if(!(navigator.platform.substr(0,3)=="Mac"&&O))return n()}
+function g(){var a;if(H){a="<FONT POINT-SIZE="+A.k+" FACE="+A.q+A.o+" COLOR="+A.p+">"+A.text+"</FONT>";if(A.s=="bold")a="<B>"+a+"</B>";if(A.r=="italic")a="<I>"+a+"</I>"}else a='<FONT style="font-family: '+A.q+A.o+";color: "+A.p+";font-size: "+A.k+A.w+";font-weight: "+A.s+";font-style:"+A.r+'">'+A.text+"</FONT>";return a}function i(){if(H||O||Q){A.a=0;S!=null&&w(S)}return true}
+function l(a){if(H)return a.x;var c;for(c=0;a.offsetParent!=null;){c+=a.offsetLeft;a=a.offsetParent}c+=a.offsetLeft;return c}function m(a){if(H)return a.y;var c;for(c=0;a.offsetParent!=null;){c+=a.offsetTop;a=a.offsetParent}c+=a.offsetTop;return c}function n(){var a;a=o();u(a);A.a=0;s();return true}
+function o(){var a="",c="",d="";if(A.t&&A.border>0)c='style="border-width:thin;border-style:solid;border-color:'+A.borderColor+'";';else{if(A.borderColor!="")c='BGCOLOR="'+A.borderColor+'"';if(A.fillColor!="")d='BGCOLOR="'+A.fillColor+'"';if(A.t)d=c=""}if(A.height>0)a="HEIGHT="+A.height;var j='style="cursor:pointer;cursor:hand"';if(A.url!=null){self.status="LINK: "+A.url;j+="onclick=\"goTo('"+A.url+"','";j+=A.target!=null?A.target+"');\"":"self');\""}if(A.i!=0||A.j!=0||A.n!=0||A.m!=0){txt="<TABLE "+
+j+" BORDER=0 CELLPADDING="+A.border+" CELLSPACING=0 "+c+" "+a+"><TR><TD><TABLE BORDER=0 CELLPADDING=0 CELLSPACING=0><TR><TD COLSPAN=3 HEIGHT="+A.n+" "+d+"></TD></TR><TR><TD WIDTH="+A.i+" "+d+"></TD><TD VALIGN=TOP "+d+"><TABLE WIDTH="+(A.width-A.i-A.j)+" BORDER=0 CELLPADDING=0 CELLSPACING=0 "+d+" "+a+"><TR><TD VALIGN=TOP ALIGN="+A.l+">";txt+=g()+"</TD></TR></TABLE></TD><TD WIDTH="+A.j+" "+d+"></TD></TR><TR><TD COLSPAN=3 HEIGHT="+A.m+" "+d+"></TD></TR></TABLE></TD></TR></TABLE>"}else txt="<TABLE "+
+j+" WIDTH="+A.width+" BORDER=0 CELLPADDING="+A.border+" CELLSPACING=0 "+c+" "+a+"><TR><TD><TABLE WIDTH=100% BORDER=0 CELLPADDING=2 CELLSPACING=0 "+d+" "+a+"><TR><TD VALIGN=TOP ALIGN="+A.l+">"+g()+"</TD></TR></TABLE></TD></TR></TABLE>";return txt}function p(a,c){var d=q(c);if(d)d.location=a;else{c=c.substring(1);if(d=q(c))d.location=a;else window.open(a)}}function q(a){for(var c=self,d=null;c!=null&&c!=d;){d=c;if(c.frames)if(c.frames[a])return c.frames[a];c=c.parent}return null}
+function s(){if(H||O||Q)if(A.a==0){T();v(S);A.a=1}}
+function T(){var a,c,d,j;if(A.g>-100)A.x=A.g;else{d=O?P.document.body.scrollLeft:P.pageXOffset;if(O)j=P.document.body.clientWidth;if(H)j=P.innerWidth;if(Q)j=P.outerWidth;if(A.u==1)A.b=A.x-d>eval(j)/2?U:V}if(A.b==W)a=A.x+A.c-A.width/2;else if(A.b==V){a=A.x+A.c;if(eval(a)+eval(A.width)>d+j){a=j+d-A.width;if(a<0)a=0}}else if(A.b==U){a=A.x-A.c-A.width;if(a<d)a=d}d=0;if(A.h>-100)A.y=A.h;else{d=O?P.document.body.scrollTop:P.pageYOffset;if(A.z==1){if(O)iheight=P.document.body.clientHeight;if(H)iheight=P.innerHeight;
+if(Q)iheight=P.outerHeight;iheight=eval(iheight)/2;A.e=A.y-d>iheight?X:Y}}if(A.e==X){if(A.f==0){c=O?P.document.all.overDiv:S;A.f=H?c.clip.height:c.offsetHeight}c=A.y-(A.f+A.d);if(c<d)c=d}else if(A.e==Y)c=A.y+A.d;else if(A.e==W)c=A.y+A.d-A.height/2;if(G!=null){if(a<K)a=K;if(c<L)c=L;if(a+A.width>K+I)a=K+I-A.width;if(c+A.height+6>L+J)c=L+J-A.height-6}x(S,a,c)}
+function r(a){if(H||Q){A.x=a.pageX;A.y=a.pageY}if(O){A.x=event.x;A.y=event.y}if(Z){A.x=event.x+P.document.body.scrollLeft;A.y=event.y+P.document.body.scrollTop}if(G!=null)if(A.x<K)i();else if(A.x>K+I)i();else if(A.y<L)i();else A.y>L+J&&i();A.a==1&&T()}function t(a){if(H){if(typeof a.document.v=="undefined")return false}else if(O){if(typeof a.document.all.overDiv=="undefined")return false}else if(Q)if(a.document.getElementById("overDiv")==null)return false;return true}
+function u(a){a+="n";if(H){var c=P.document.v.document;c.write(a);c.close()}else if(O)P.document.all.overDiv.innerHTML=a;else if(Q){range=P.document.createRange();range.setStartBefore(S);for(domfrag=range.createContextualFragment(a);S.hasChildNodes();)S.removeChild(S.lastChild);S.appendChild(domfrag)}}function v(a){if(H)a.visibility="show";else if(O)a.visibility="visible";else if(Q)a.style.visibility="visible"}
+function w(a){if(H)a.visibility="hide";else if(O)a.visibility="hidden";else if(Q)a.style.visibility="hidden";self.status=""}function x(a,c,d){if(H||O){a.left=c;a.top=d}else if(Q){a.style.left=c+"px";a.style.top=d+"px"}}
+function y(a){if(a==null||a==""){this.B=1;this.text="No Text Specified";this.fillColor="#CCCCFF";this.p=this.borderColor="Black";this.d=this.c=2;this.b=W;this.width=9999;this.border=1;this.height=0;this.h=this.g=-100;this.m=this.n=this.j=this.i=0;this.e=X;this.f=0;this.q="";this.o=",Helvetica,Arial";this.k="10";this.w="pt";this.r=this.s="";this.t=this.y=this.x=this.z=this.u=this.a=0;this.l="LEFT";this.target=this.url=null}else{this.B=a.B;this.text=a.text;this.fillColor=a.fillColor;this.borderColor=
+a.borderColor;this.p=a.p;this.c=a.c;this.d=a.d;this.b=a.b;this.width=a.width;this.border=a.border;this.height=a.height;this.g=a.g;this.h=a.h;this.i=a.i;this.j=a.j;this.n=a.n;this.m=a.m;this.e=a.e;this.f=a.f;this.q=a.q;this.o=a.o;this.k=a.k;this.w=a.w;this.s=a.s;this.r=a.r;this.a=a.a;this.u=a.u;this.z=a.z;this.x=a.x;this.y=a.y;this.t=a.t;this.l=a.l;this.url=a.url;this.target=a.target}return this}var A=new y,B=0,C=1,D=2,E=3,F=4,M=5,N=6,U=1,V=2,W=3,X=1,Y=2;W=3;if(typeof R=="undefined")var R=self;
+var G=null,K=null,L=null,I=null,J=null,P=R,S=null,H=document.D?true:false,Q=document.getElementById?true:false,O=document.all?true:false,Z=false;if(O){if(navigator.userAgent.indexOf("MSIE 5")>0||navigator.userAgent.indexOf("MSIE 6")>0)Z=true;if(Q)Q=false}if(H||O||Q){document.onmousemove=r;H&&document.captureEvents(Event.C)}else{i=f=e;ver3fix=true}
+function z(){if(H||O||Q){if(!$("overDiv")){var a=document.createElement("div");a.id="overDiv";a.name="overDiv";a.style.position="absolute";a.style.visibility="hidden";a.style.zIndex=1E3;document.body.insertBefore(a,document.body.childNodes[0])}if(typeof document.body.A=="undefined"){a=document.createElement("div");a.id="hdiv";a.name="hdiv";a.style.position="absolute";a.style.visibility="hidden";a.style.zIndex=1E3;document.body.insertBefore(a,document.body.childNodes[0])}}b(z)};

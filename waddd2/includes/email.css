@@ -1,0 +1,8 @@
+#skip {display:none;}
+#main {margin-left:1em;}
+#side_menu { position:relative; width:100%; top:0; text-align:left;}
+ul#funders li {display:inline-block; width:inherit; padding:0 1em; vertical-align:middle; }
+ul#funders, ul#funders li { text-align:center; }
+ul#funders {width:100%; text-align:left;}
+ul#funders li.short { width:6em }
+ul#funders li.long { width:19em; }

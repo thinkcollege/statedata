@@ -1,0 +1,11 @@
+g.rule text {
+  font-size: 12px;
+}
+g.ticks text {
+  font-size: 11px;
+}
+g.tooltip {
+  z-index: 1500;
+
+}
+g.legend { z-index: 10; }

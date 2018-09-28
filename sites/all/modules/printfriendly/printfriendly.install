@@ -1,0 +1,31 @@
+<?php
+
+/**
+ * @file
+ * The install and update code for the printfriendly module.
+ */
+
+/**
+ * Remove unused variables.
+ */
+function printfriendly_uninstall() {
+  variable_del('printfriendly_types');
+  variable_del('printfriendly_button_type');
+  variable_del('printfriendly_label');
+  variable_del('printfriendly_description');
+  variable_del('printfriendly_image');
+  variable_del('printfriendly_display');
+  
+  // Features field
+  variable_del('printfriendly_page_custom_header');
+  variable_del('printfriendly_tagline');
+  variable_del('printfriendly_click_delete');
+  variable_del('printfriendly_images');
+  variable_del('printfriendly_image_style');
+  variable_del('printfriendly_pdf');
+  variable_del('printfriendly_email');
+  variable_del('printfriendly_print');
+  variable_del('printfriendly_custom_css');
+  variable_del('custom_button_img_url');
+
+}

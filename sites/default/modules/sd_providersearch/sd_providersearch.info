@@ -1,0 +1,10 @@
+name = State Data Provider Search
+description = An example module showing how use the database API: DBTNG.
+package = Example modules
+core = 7.x
+
+
+; Information added by drupal.org packaging script on 2013-09-03
+version = "7.x-1.x-dev"
+core = "7.x"
+

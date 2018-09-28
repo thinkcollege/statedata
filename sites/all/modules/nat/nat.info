@@ -1,0 +1,19 @@
+name = NAT
+description = NAT - node auto term - is a helper module that automatically creates a term using the same title as a node.
+core = 7.x
+
+dependencies[] = taxonomy
+
+files[] = includes/nat_handler_argument_term_node_tid_depth.inc
+files[] = includes/nat_handler_argument_term_node_tid_depth_modifier.inc
+files[] = includes/nat.views.inc
+files[] = tests/nat.test
+
+configure = admin/structure/nat
+
+; Information added by drupal.org packaging script on 2012-04-05
+version = "7.x-1.0-alpha5"
+core = "7.x"
+project = "nat"
+datestamp = "1333610473"
+

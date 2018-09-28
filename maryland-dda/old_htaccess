@@ -1,0 +1,8 @@
+AuthUserFile /home/statedata/statedata.info/htdocs/dds/.htpasswd
+AuthName "DDS Data"
+AuthType Basic
+require valid-user
+Order deny,allow
+Deny from all
+Allow from 158.121.240.0/24
+Satisfy any

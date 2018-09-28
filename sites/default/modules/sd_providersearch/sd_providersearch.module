@@ -1,0 +1,2090 @@
+<?php
+
+
+/**
+ * @file
+ * Examples demonstrating the Drupal Form API.
+ */
+
+/**
+ * @defgroup sd_providersearch Example: Form API
+ * @ingroup examples
+ * @{
+ * Examples demonstrating the Drupal Form API.
+ *
+ * The Form Example module is a part of the Examples for Developers Project
+ * and provides various Drupal Form API Examples. You can download and
+ * experiment with this code at the
+ * @link https://drupal.org/project/examples Examples for Developers project page. @endlink
+ */
+
+/**
+ * Implements hook_menu().
+ *
+ * Here we set up the URLs (menu entries) for the
+ * form examples. Note that most of the menu items
+ * have page callbacks and page arguments set, with
+ * page arguments set to be functions in external files.
+ */
+  include('sd_providersearch_map.inc');
+function sd_providersearch_menu() {
+  $items = array();
+  $items['washington/search'] = array(
+    'title' => 'Search Washington Employment Providers',
+    'page callback' => 'drupal_get_form',
+    'page arguments' =>  array('sd_providersearch_intro',1),
+    'access callback' => TRUE,
+    'expanded' => TRUE,
+  );
+
+  $items['washington/citysearch_autocomplete_callback'] = array(
+    'page callback' => 'sd_providersearch_citysearch_autocomplete_callback',
+   'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+
+  );
+
+
+  $items['washington/result/%/%'] = array(
+    'title' => 'Washington Employment Provider Search: Results',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+    'page callback' => 'sd_providersearch_resultlist',
+    'page arguments' => array(2,3),
+    );
+
+    $items['washington/profile/%/%'] = array(
+      'title' => 'Washington Employment Provider Search: Agency Results',
+      'type' => MENU_CALLBACK,
+      'access arguments' => array('access content'),
+      'page callback' => 'sd_providersearch_ind_profile',
+      'page arguments' => array(2,3),
+      );
+
+      $items['washington/comparison'] = array(
+        'title' => 'Washington Provider Comparison',
+        'type' => MENU_CALLBACK,
+        'access arguments' => array('access content'),
+        'page callback' => 'sd_providersearch_agency_comparison',
+
+        );
+
+  return $items;
+}
+
+/**
+ * Page callback for our general info page.
+ */
+
+
+function _sd_providersearch_get_first_dropdown_options() {
+
+ $entries = array();
+ $entries =  db_query("SELECT DISTINCT(`Name`) `cityvalue`, `Name` `cityName` FROM `{ps_cities}` ORDER BY `Name`")->fetchAll(PDO::FETCH_ASSOC);
+
+  if (!empty($entries))
+  {
+
+  $options[''] = 'Select town or city';
+     foreach ($entries as $result) {
+
+         $options[$result['cityvalue']] =
+             $result['cityName'];
+ }
+   }
+
+   return $options;
+ }
+
+
+ function sd_providersearch_citysearch_autocomplete_callback($string = "") {
+   $matches = array();
+   if ($string) {
+     $result = db_select('ps_cities')
+       ->fields('ps_cities', array('Name', 'Name'))
+       ->condition('Name', db_like($string) . '%', 'LIKE')
+       ->range(0, 10)
+       ->execute();
+     foreach ($result as $city) {
+       // In the simplest case (see user_autocomplete), the key and the value are the same. Here we'll display the
+       // uid along with the username in the dropdown.
+       $matches[$city->Name] = check_plain($city->Name);
+     }
+   }
+
+   drupal_json_output($matches);
+ }
+
+
+
+
+function sd_providersearch_intro($form, &$form_state,$value = '') {
+if($value == 'search')  { $mapbox = "</div>" . sd_providersearch_intromap(); $prefix = '<div class="clearfix"><div class="pageOnly"><p>This website was designed to serve as a resource for individuals with disabilities, as well as friends and family members, by providing information about community rehabilitation providers that can help find community jobs.* Use the options below to locate providers near you or to find more information about choosing an employment support provider and planning for your job search.</p>See our <a href="/washington/quality-employment-services">Quality Employment Services</a> page for an extensive guide to employment services in Washington State.</p><p>Another valuable resource is <a href="https://www.ssa.gov/redbook/" target="_blank">the 2016 Red Book</a> from the Social Security Administration. It is a reference source about the employment-related provisions of Social Security Disability Insurance and the Supplemental Security Income Programs</p></div><div id="introForm">'; $suffix = '<div class="pageOnly"><p style="margin-top: 12px"><em>* Note: The snapshots available through this website only include services provided under employment contracts. Providers may offer other work or non-work services. Additionally, an individual provider\'s employment outcomes will be affected by many factors including who the organization supports and the local economy. We encourage you to visit and speak with each provider about its services and outcomes before enrolling.  For example someone with high support needs experience may vary from those posted. The outcomes will be based on the individual needs. </em></p><p><strong>Occupational Services Providers:</strong> please look at the information about your organization on this site.  If anything is missing or incomplete, <strong><a href="/washington/provider-update">please fill out this form</a></strong> and we will update your information on the site.</p></div></div>'; } else { $mapbox = ""; $prefix = ''; $suffix = '';}
+ $form['#prefix'] =  $prefix;
+   $form['citysearch'] = array(
+
+     '#type' => 'textfield',
+     '#title' => t('Type the name of a city or town to find nearby providers that serve individuals in your county.'),
+     // The autocomplete path is provided in hook_menu in ajax_example.module.
+     '#autocomplete_path' => 'washington/citysearch_autocomplete_callback',
+   );
+
+
+$options_first = _sd_providersearch_get_first_dropdown_options();
+  $form['base_city'] = array(
+    '#type' => 'select',
+    '#title' => 'Or, select a city or town from the dropdown list below',
+    '#options' => $options_first,
+  );
+
+  $form['range_miles'] = array(
+    '#type' => 'select',
+    '#title' => 'Range in miles',
+    '#options' => array(
+      5 => t('Five'),
+      10 => t('Ten'),
+     20 => t('Twenty'),
+
+    ),
+  );
+
+
+
+  $form['submit'] = array(
+
+    '#type' => 'submit',
+    '#value' => t('Search Providers'),
+  );
+         $form['#attached']  =array( 'css' => array(
+    drupal_get_path('module', 'sd_providersearch') . '/providersearch.css',
+    drupal_get_path('module', 'sd_providersearch') . '/MarkerCluster.css',  drupal_get_path('module', 'sd_providersearch') . '/MarkerCluster.Default.css', drupal_get_path('module', 'sd_providersearch') . '/leaflet.css'),
+  'js' => array(drupal_get_path('module', 'sd_providersearch') . '/leaflet.js', drupal_get_path('module', 'sd_providersearch') . '/leaflet.markercluster.js')
+);
+     $form['#suffix'] =  $mapbox .$suffix;
+  return $form;
+}
+
+function sd_providersearch_intro_submit($form, &$form_state) {
+
+  $rangevalue = $form_state['values']['range_miles'];
+  $optiontext = $form['range_miles']['#options'][$rangevalue];
+$_SESSION['locateform']['range_text'] = $optiontext;
+
+$submitcity = $form_state['values']['citysearch'] == '' ? $form_state['values']['base_city'] : $form_state['values']['citysearch'];
+$form_state['redirect'] = 'washington/result/' . $submitcity . '/' . $form_state['values']['range_miles'];
+
+}
+
+function sd_providersearch_intro_validate($form, &$form_state) {
+  $citysearch = $form_state['values']['citysearch'];
+   $basecity = $form_state['values']['base_city'];
+  if ((!$citysearch || $citysearch == "") && (!$basecity || $basecity == "")) {
+    form_set_error('citysearch', t('Enter a town or city name or select one from the dropdown list'));
+  }
+}
+function sd_providersearch_intromap() {
+  $start_time = microtime(TRUE);
+  if ($cache = cache_get('home_page_map_block')) {
+    /*
+     * Get cached data. Complex data types will be unserialized automatically.
+     */
+    $mapblock = $cache->data;
+
+  } else {
+  $now = date('Y-m');
+
+ $startmonth =  new DateTime("$now - 16 months");
+ $beginmonth = date_format($startmonth, 'Y-m-') . '01';
+
+  $provarrayquery = "select DISTINCT `ProviderNumber` from {ps_billing} WHERE (`ServiceYearMonth` >= '$beginmonth' AND (`ServiceCode` = 'DV29' OR `ServiceCode` = 'DV26') AND `HoursPaid` > 0)";
+  $providerarrayassoc = db_query($provarrayquery)->fetchAll(PDO::FETCH_ASSOC);
+  $providerarray = array();
+ foreach($providerarrayassoc as $numberkey) { $providerarray[]= $numberkey['ProviderNumber'];}
+ $providerarrayflat = implode(',',$providerarray);
+
+$query = "select `orgs`.`id` from {ps_orgs_wa} orgs
+ WHERE  `orgs`.`id` in ($providerarrayflat)";
+$mapids = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+
+$idarray = array();
+foreach($mapids as $provider) { $idarray[]= $provider['id'];}
+$idtext = implode(',',$idarray);
+
+
+ $query = "select  MIN(`orgs`.`lat`) swlat, MIN(`orgs`.`long`) swlong, MAX(`orgs`.`lat`) nelat, MAX(`orgs`.`long`) nelong,((MIN(`orgs`.`lat`) + MAX(`orgs`.`lat`)) /2) midlat, ((MIN(`orgs`.`long`) + MAX(`orgs`.`long`)) /2) midlong from {ps_orgs_wa} orgs  WHERE `orgs`.`id` IN ($idtext)";
+
+$map_params = db_query($query)->fetch(PDO::FETCH_ASSOC);
+
+
+$markertext = "";
+$rowcounter = count($mapids);
+if($rowcounter > 0) {
+for ($i = 0 ; $i < $rowcounter; $i++) {
+
+$agency_details = sd_providersearch_agency_details($mapids[$i]['id']);
+
+ if($agency_details['lat'] && $agency_details['lat'] != '' && $agency_details['long'] && $agency_details['long'] != '') $markertext .=
+  "var marker$i = L.marker([" . $agency_details['lat'] . "," . $agency_details['long'] . "]);
+  marker$i.bindPopup('" . "<a href=\"/washington/profile/" . $mapids[$i]['id'] . "/" . $agency_details['countyname'] . "\">" . addslashes($agency_details['agency']) . "</a><br />" . addslashes($agency_details['address1']) . "<br />" .  $agency_details['city'] . ", " . $agency_details['state'] . "&nbsp;&nbsp" . $agency_details['zip'] . "'); \n markers.addLayer(marker$i);";
+
+
+}
+
+}
+$mapblock = "<p class=\"mapLegend\"><strong>Or, browse all provider locations in the state using the map below</strong></p><div id=\"homeMap\"></div>
+<script type=\"text/javascript\">\n//<![CDATA[\n\n var map = L.map('homeMap').setView([" . $map_params['midlat'] . "," . $map_params['midlong'] . "], 17);\nL.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {\n    attribution: 'Map data &copy; <a href=\"https://openstreetmap.org\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://mapbox.com\">Mapbox</a>',\n    maxZoom: 18,\n    id: 'paulfoos.nlc0e989',\n    accessToken: 'pk.eyJ1IjoicGF1bGZvb3MiLCJhIjoiY2lmaWg0ejIyYmxmbHJ5bHhncWFicGZ6NSJ9.NemNGVt96OqxZsRaO7EbGw'\n}).addTo(map);\nmap.fitBounds([\n    [" . $map_params['swlat'] . "," . $map_params['swlong'] . "],\n    [" . $map_params['nelat'] . "," . $map_params['nelong'] . "]\n],{padding: [5,5]});\n
+var markers = L.markerClusterGroup({ chunkedLoading: true });
+\n$markertext\n map.addLayer(markers);//]]>\n    </script>";
+    cache_set('home_page_map_block', $mapblock); }
+    $end_time = microtime(TRUE);
+    $duration = $end_time - $start_time;
+return $mapblock;
+}
+
+
+function sd_providersearch_result_additional($countycode,$geoprovs) {
+$excludearray = array();
+if(!empty($geoprovs)) {foreach ($geoprovs as $geoprov) {
+$excludearray[]= $geoprov[0];
+}
+$excludes = implode(',',$excludearray);
+
+ }
+
+
+
+    $now = date('Y-m');
+   $lastmonth= new DateTime("$now - 5 months");
+   $startmonth =  new DateTime("$now - 16 months");
+   $beginmonth = date_format($startmonth, 'Y-m-') . '01';
+   $endmonth = date_format($lastmonth, 'Y-m-') . '01';
+ db_set_active('default');
+ $query = "SELECT DISTINCT(`ProviderNumber`) FROM {ps_billing} WHERE `CountyCode` = :countycode AND `ServiceYearMonth` >= '$beginmonth' " .(!empty($geoprovs) ? "AND ProviderNumber NOT IN ($excludes)" : "") . "ORDER BY `ProviderNumber`";
+ $entries =  db_query($query, array(':countycode' => $countycode))->fetchAll(PDO::FETCH_ASSOC);
+ db_set_active('default');
+ $countyprovs = array();
+     if (!empty($entries))
+     {
+$countyprovs = array();
+ foreach ($entries as $entry) {
+ $countyprovs[]= array($entry['ProviderNumber'],$countycode);
+ }
+ }
+
+return $countyprovs;
+}
+ function sd_providersearch_sel_by_county($countycode,$geoprovs) {
+ $countyarray = array();
+ foreach ($geoprovs as $geoprov) {
+ $countyarray[]= $geoprov['id'];
+ }
+ $countyprovids = implode(',',$countyarray);
+
+     $now = date('Y-m');
+    $lastmonth= new DateTime("$now - 5 months");
+    $startmonth =  new DateTime("$now - 16 months");
+    $beginmonth = date_format($startmonth, 'Y-m-') . '01';
+    $endmonth = date_format($lastmonth, 'Y-m-') . '01';
+  db_set_active('default');
+  $entries =  db_query("SELECT DISTINCT(`ProviderNumber`) FROM {ps_billing} WHERE `CountyCode` = :countycode AND `ServiceYearMonth` >= '$beginmonth' AND ProviderNumber IN ($countyprovids) ORDER BY `ProviderNumber`", array(':countycode' => $countycode))->fetchAll(PDO::FETCH_ASSOC);
+
+      if (!empty($entries))
+      {
+ $countyprovs = array();
+  foreach ($entries as $entry) {
+  $countyprovs[]= array($entry['ProviderNumber'],$countycode);
+  }
+  }
+
+ return $countyprovs;
+ }
+
+ // Search Results list
+
+function sd_providersearch_resultlist($value1,$value2) {
+$build = array();
+$providertext = "";
+   $entries =  db_query('SELECT `zipcode`,`county_code`,`county` FROM `{ps_cities}` WHERE `state_prefix` = :statepre AND `Name` = :city LIMIT 1', array(':statepre' => "WA",':city' => "$value1"))->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($entries))
+    {
+
+foreach ($entries as $entry) {
+     $zip_result = $entry['zipcode'];
+     $coderesult = $entry['county_code'];
+     $countyserved = $entry['county'];
+     }
+
+     }
+  $now = date('Y-m');
+
+ $startmonth =  new DateTime("$now - 16 months");
+ $beginmonth = date_format($startmonth, 'Y-m-') . '01';
+ $provarrayquery = "select DISTINCT `ProviderNumber` from {ps_billing} WHERE `ServiceYearMonth` >= '$beginmonth' AND `CountyCode` = '$coderesult'";
+ $providerarrayassoc = db_query($provarrayquery)->fetchAll(PDO::FETCH_ASSOC);
+ $providerarray = array();
+foreach($providerarrayassoc as $numberkey) { $providerarray[]= $numberkey['ProviderNumber'];}
+$providerarrayflat = implode(',',$providerarray);
+
+ $query = "select `id` from {ps_orgs_wa} orgs LEFT JOIN {ps_cities} cities ON LOWER(`orgs`.`city`) = LOWER(`cities`.`Name`) WHERE id in ($providerarrayflat) AND ((`lat` > 0 OR `latitude` > 0) AND( `city` = '$value1'";
+ $queryids = sd_providersearch_build_in_clause($zip_result,$value2,$coderesult);
+
+ if($queryids) { $query .= $queryids;
+
+  $map = new map();
+
+ $ziparray = $map->sd_providersearch_map_fit_points($zip_result, $value2,$coderesult); }
+
+$query .="))";
+
+$getinitproviders = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+$getproviders= count($getinitproviders) > 0 ? sd_providersearch_sel_by_county($coderesult,$getinitproviders) : array();
+
+$rowcounter = count($getproviders);
+$countyprovs =  sd_providersearch_result_additional($coderesult,$getproviders);
+$addltxt = "";
+$countycount = count($countyprovs);
+if ($rowcounter > 0) {
+for ($i = 0 ; $i < $rowcounter; $i++) {
+
+$agency_details = sd_providersearch_agency_details($getproviders[$i][0],$coderesult);
+$providervar = isset($getproviders[$i][0]) ? $getproviders[$i][0] : NULL;
+$agencyvar = isset($agency_details['agency']) ? $agency_details['agency'] : NULL;
+
+ $checkbox= drupal_render(drupal_get_form('sd_providersearch_checkbox_action',$providervar,$agencyvar,$coderesult,$countyserved));
+  $providertext .= "<h3>$checkbox
+<a class=\"dragItem\" href=\"/washington/profile/" . $getproviders[$i][0] . "/" . $agency_details['countyname'] . "\">" . $agency_details['agency'] . "</a> <span class=\"smallerH3\">(in " . $agency_details['countyname'] . " County)</span></h3>" .
+  $agency_details['full_text'];
+
+
+   }
+
+ $listmap = sd_providersearch_buildListmap($getproviders,$countyserved);
+$providertext .= "</div><p><a href=\"#listIntro\"><em>Back to top of page</em></a></p>"; }
+
+if ($countycount > 0) { $addltxt .= $rowcounter > 0 ? "<p id=\"otherProvs\">&nbsp;</p><h2>Not on map, but serving individuals in $countyserved County</h2> <div id=\"addlText\" class=\"clearfix\">" : "<h2>Agencies serving individuals in $countyserved County</h2> <div id=\"addlText\" class=\"clearfix\">";
+for ($i = 0 ; $i < count($countyprovs); $i++) {
+  $agencyvar = isset($addl_details['agency']) ? $addl_details['agency'] : NULL;
+$addl_details = sd_providersearch_agency_details($countyprovs[$i][0],$coderesult);
+$countyprovsvar = isset($countyprovs[$i][0]) ? $countyprovs[$i][0] : NULL;
+ $checkbox = drupal_render(drupal_get_form('sd_providersearch_checkbox_action',$countyprovsvar,$agencyvar,$coderesult,$countyserved));
+ if(isset($addl_details['countyname']) && $addl_details['countyname'] != '') { $addltxt .= "<h3>$checkbox
+<a class=\"dragItem\" href=\"/washington/profile/" . $countyprovs[$i][0] . "/"  . $addl_details['countyname'] . "\">" . $addl_details['agency'] . "</a> <span class=\"smallerH3\">(in " . $addl_details['countyname'] . " County)</span></h3>" .
+ ($addl_details['city'] ? $addl_details['full_text'] : ""); }
+
+
+   }
+   $addltxt .="</div><p><a href=\"#listIntro\"><em>Back to top of page</em></a></p>";
+
+   } else { $providertext .= "<p>No providers found.  Please try your search again within a larger area, or in a different city.</p>";
+
+
+   }
+  if ($rowcounter > 0) { $build['sometext'] = array(
+     t('location')  => array(
+       '#markup' => "<div id=\"listIntro\"><h3>$rowcounter agencies found in, or within $value2 miles of, " . $value1 . "</h3><p>Browse the list below and select the agency name, or click on the pop-up links in the map for more information.</p>" . ($countycount > 0 ? "<h3><strong><a href=\"#otherProvs\" class=\"otherLink\">An additional $countycount providers</a></strong></h3><p><strong>were found with locations outside your search area, but serving $countyserved County.</a></strong></p> <p><a href=\"#otherProvs\" class=\"otherLink\">Follow this link to browse these providers</a></p>." : "" ) . "<p><strong>Compare Providers</strong><br />Check the boxes in the list below to add agencies to your comparison list on the left.  Then select the \"Compare Providers\" button to see a detailed comparison of agency employment figures.</p></div>$listmap<div id=\"provList\" class=\"list1 list clearfix\">$providertext $addltxt"),
+
+     ); }
+     else {
+     $build['sometext'] = array(
+          t('location')  => array(
+            '#markup' => "<div id=\"listIntro\"><h3>$countycount providers</a></strong></h3><p><strong>were found serving $countyserved County.</h3><p>Browse the links below to find out more about these agencies.</p>" . "<p><strong>Compare Providers</strong><br />Check the boxes in the list below to add agencies to your comparison list on the left.  Then select the \"Compare Providers\" button to see a detailed comparison of agency employment figures.</p></div> $addltxt"),
+
+          );
+     }
+     $build['sometext']['#attached'] = array( 'css' => array(
+    drupal_get_path('module', 'sd_providersearch') . '/providersearch.css',
+    drupal_get_path('module', 'sd_providersearch') . '/MarkerCluster.css',  drupal_get_path('module', 'sd_providersearch') . '/MarkerCluster.Default.css', drupal_get_path('module', 'sd_providersearch') . '/leaflet.css'),
+  'js' => array(drupal_get_path('module', 'sd_providersearch') . '/leaflet.js', drupal_get_path('module', 'sd_providersearch') . '/leaflet.markercluster.js')
+);
+
+ return $build; }
+if(isset($rowcounter) && $rowcounter == 0 && isset($countycount) && $countycount == 0) {
+
+   $build['sometext'] = array(
+     t('location')  => array(
+       '#markup' => "Getproviders: $countycount<br />No agencies found in, or within $value2 miles of, " . (isset($value1) ? $value1 : '') .   " serving " . (isset($countyserved) ? $countyserved : '') . " County. Try your search again on the left within a larger area or using a different town or city."),
+
+     );
+
+return $build;
+}
+
+function sd_providersearch_checkbox_action($form,&$form_state, $provid, $agencyname, $county,$countyname) {
+
+  $form['provid'] = array(
+    '#title' => t("Check this box to add this agency to your comparison list"),
+    '#type' => 'checkbox',
+
+    '#return_value' => "$provid",
+    '#attributes' => array(
+       'class' => 'compareChk',
+     ),
+    '#ajax' => array(
+      'callback' => 'sd_providersearch_checkbox_callback',
+    ),
+    '#suffix' => ""
+  );
+  $form['provid_token']= array(
+      '#type' => 'hidden',
+      '#value' => $provid,
+  );
+  $form['provid_name']= array(
+      '#type' => 'hidden',
+      '#value' => $agencyname,
+  );
+  $form['provid_county']= array(
+      '#type' => 'hidden',
+      '#value' => $county,
+  );
+  $form['provid_countyname']= array(
+      '#type' => 'hidden',
+      '#value' => $countyname,
+  );
+  return $form;
+  }
+
+
+function sd_providersearch_checkbox_callback($form, $form_state) {
+$_SESSION['compareids'] = $_SESSION['compareids'] ? $_SESSION['compareids'] : array();
+ $selector = '#edit-compareprov';
+
+ $commands = array();
+
+  $checkbox_value = $form_state['values']['provid'];
+  $defaultvalue = $form_state['values']['provid_token'];
+  $agencyname = $form_state['values']['provid_name'];
+  $county = $form_state['values']['provid_county'];
+  $countyname = $form_state['values']['provid_countyname'];
+  $has_value = $checkbox_value == $defaultvalue  ? TRUE:FALSE;
+ if($has_value && !in_array($defaultvalue,$_SESSION['compareids'])) {$_SESSION['compareids'][]= $defaultvalue;
+ $_SESSION['compareids_cty'][]= array($defaultvalue =>$county);
+ $commands[]= ajax_command_append($selector, "<div class=\"form-type-checkbox form-item-compareprov-$defaultvalue form-item checkbox\">
+ <input id=\"edit-compareprov-$defaultvalue\" class=\"\" type=\"checkbox\" value=\"$defaultvalue\" name=\"compareprov[$defaultvalue]\" checked=\"checked\">
+
+ <label for=\"edit-compareprov-$defaultvalue\">$agencyname (in $countyname County)</label>
+ <input id=\"edit-compareprov-cty-$defaultvalue\" class=\"\" type=\"hidden\" value=\"$county\" name=\"compareprov-cty[$defaultvalue]\" />
+ </div>");
+ } elseif(!$has_value)
+{ $_SESSION['compareids'] = sd_providersearch_array_remove_by_value($_SESSION['compareids'],$defaultvalue);
+ $commands[]=   ajax_command_remove("#edit-compareprov .form-item-compareprov-$defaultvalue");
+ }
+
+
+
+
+
+
+
+ return array('#type' => 'ajax', '#commands' => $commands);
+}
+
+
+
+
+
+
+function sd_providersearch_array_remove_by_value($array, $value)
+{
+    return array_values(array_diff($array, array($value)));
+}
+
+
+
+function _sd_providersearch_compare_checkbox_options() {
+
+ $entries = isset($_SESSION['compareids']) ? $_SESSION['compareids'] : NULL;
+ if(!empty($entries)) {
+ foreach ($entries as $key=>$value) {
+ $name =  db_query("SELECT `agency` FROM `{ps_orgs_wa}` WHERE `id` = :statepre", array(':statepre' => $value))->fetchAll(PDO::FETCH_ASSOC);
+
+  if (!empty($name))
+  {
+
+
+     foreach ($name as $result) {
+
+         $options[$value] =
+             $result['agency'];
+ }
+   }
+
+}
+ return $options;
+ }
+  return false;
+ }
+
+
+
+
+
+function sd_providersearch_compare_form($form, &$form_state) {
+
+$options = _sd_providersearch_compare_checkbox_options();
+
+$values = array();
+foreach($options as $key => $value) {$values[] = "$key";
+
+}
+
+
+
+  $form['compareprov'] = array(
+    '#title' => t(""),
+    '#type' => 'checkboxes',
+      '#default_value' => $values,
+    '#options' => $options,
+    '#attributes' => array(
+       'class' => 'compareProv',
+     ),
+
+  );
+if(isset($_SESSION['compareids_cty']))   {
+  for($i = 0; $i< count($_SESSION['compareids_cty']); $i++) {
+  foreach($_SESSION['compareids_cty'][$i] as $num => $cty)
+ { $form["compareprov-cty[$num]"] = array(
+     '#title' => t(""),
+     '#type' => 'hidden',
+       '#value' => "$cty",
+     '#attributes' => array(
+        'id' => "edit-compareprov-cty-$num",
+      ),
+
+   );
+
+  } }
+  }
+ $form['submit'] = $options == false ? array(
+
+   '#type' => 'submit',
+    '#prefix' => "<p>Check the boxes next to agency names on the page to the right.  The agency names will then appear in this comparison list.  Hit the \"Compare Providers\" button below to see a comparison of agency employment figures.</p>",
+   '#value' => t('Compare Providers'),
+ ) :
+ array(
+
+    '#type' => 'submit',
+     '#prefix' => "",
+    '#value' => t('Compare Providers'),
+  );
+ if($options != false) { $form['options']['reset'] = array(
+    '#type' => 'submit',
+    '#value' => t('Clear comparison list'),
+    '#submit' => array('_sd_providersearch_comparison_reset'),
+  ); }
+
+ return $form;
+}
+
+function _sd_providersearch_comparison_reset($form, &$form_state) {
+$_SESSION['compareids'] = array();
+$_SESSION[compareids_cty] = array();
+$form_state['rebuild'] = FALSE;
+}
+
+function sd_providersearch_compare_form_submit($form, &$form_state) {
+if(!empty($form_state['values']['compareprov'])) {
+$_SESSION['compareids']= array();
+$choicearray = array();
+foreach($form_state['values']['compareprov'] as $key => $value) {
+if ($value != 0) {$choicearray[]= $value;}
+  }
+
+ $_SESSION['compareids'] = $choicearray;
+      $form_state['redirect'] = "washington/comparison";
+      return;
+}
+}
+
+function sd_providersearch_buildListmap($mapids,$county) {
+$idarray = array();
+foreach($mapids as $provider) { $idarray[]= $provider[0];}
+$idtext = implode(',',$idarray);
+
+ $query = "select MIN(`lat`) swlat, MIN(`long`) swlong, MAX(`lat`) nelat, MAX(`long`) nelong,((MIN(`lat`) + MAX(`lat`)) /2) midlat, ((MIN(`long`) + MAX(`long`)) /2) midlong from {ps_orgs_wa} WHERE `id` IN ($idtext)";
+
+$map_params = db_query($query)->fetch(PDO::FETCH_ASSOC);
+
+
+$markertext = "";
+$rowcounter = count($mapids);
+if($rowcounter > 0) {
+for ($i = 0 ; $i < $rowcounter; $i++) {
+
+$agency_details = sd_providersearch_agency_details($mapids[$i][0]);
+
+  $markertext .=
+  "var marker$i = L.marker([" . $agency_details['lat'] . "," . $agency_details['long'] . "]);
+  marker$i.bindPopup('" . "<a href=\"/washington/profile/" . $mapids[$i][0] . "/$county\">" . addslashes($agency_details['agency']) . "</a><br />" . addslashes($agency_details['address1']) . "<br />" .  $agency_details['city'] . ", " . $agency_details['state'] . "&nbsp;&nbsp" . $agency_details['zip'] . "'); \n markers.addLayer(marker$i);";
+
+
+}
+
+}
+$mapblock = "<div id=\"listMap\"></div>
+<script type=\"text/javascript\">\n//<![CDATA[\n\nvar map = L.map('listMap').setView([" . $map_params['midlat'] . "," . $map_params['midlong'] . "], 17);\nL.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {\n    attribution: 'Map data &copy; <a href=\"https://openstreetmap.org\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://mapbox.com\">Mapbox</a>',\n    maxZoom: 18,\n    id: 'paulfoos.nlc0e989',\n    accessToken: 'pk.eyJ1IjoicGF1bGZvb3MiLCJhIjoiY2lmaWg0ejIyYmxmbHJ5bHhncWFicGZ6NSJ9.NemNGVt96OqxZsRaO7EbGw'\n}).addTo(map);\nmap.fitBounds([\n    [" . $map_params['swlat'] . "," . $map_params['swlong'] . "],\n    [" . $map_params['nelat'] . "," . $map_params['nelong'] . "]\n],{padding: [20,20]});\nvar markers = L.markerClusterGroup({ chunkedLoading: true });\n$markertext\n map.addLayer(markers);//]]>\n   </script>";
+return $mapblock;
+}
+
+function sd_providersearch_single_map($providerid,$countycode) {
+
+
+
+$markertext = "";
+
+
+
+
+$agency_details = sd_providersearch_agency_details($providerid,$countycode);
+
+  $markertext .=
+  "var marker = L.marker([" . $agency_details['lat'] . "," . $agency_details['long'] . "]);
+  marker.bindPopup('" . "<strong>" . addslashes($agency_details['agency']) . "</strong><br />" . $agency_details['address1'] . "<br />" .  $agency_details['city'] . ", " . $agency_details['state'] . "&nbsp;&nbsp" . $agency_details['zip'] . "'); \n markers.addLayer(marker);";
+
+
+$mapblock = "<div id=\"singleMap\"></div>
+<script type=\"text/javascript\">\n//<![CDATA[\n\n var map = L.map('singleMap').setView([" . $agency_details['lat'] . "," .  $agency_details['long'] . "], 17);\nL.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}', {\n    attribution: 'Map data &copy; <a href=\"https://openstreetmap.org\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://mapbox.com\">Mapbox</a>',\n    maxZoom: 18,\n    id: 'paulfoos.nlc0e989',\n    accessToken: 'pk.eyJ1IjoicGF1bGZvb3MiLCJhIjoiY2lmaWg0ejIyYmxmbHJ5bHhncWFicGZ6NSJ9.NemNGVt96OqxZsRaO7EbGw'\n}).addTo(map);\n var markers = L.markerClusterGroup({ chunkedLoading: true });
+\n$markertext\n map.addLayer(markers);//]]>\n    </script>";
+return $mapblock;
+}
+
+   function sd_providersearch_ind_profile($value1,$value2) {
+  db_set_active('default');
+   $query = "select DISTINCT (`county_code`) from {ps_cities} WHERE `county` = '$value2'";
+
+  $countysearch = db_query($query)->fetch(PDO::FETCH_ASSOC);
+  $countycode = $countysearch['county_code'];
+  $provider_all = sd_providersearch_agency_details($value1,$countycode);
+  $details_title = "<h2>" . $provider_all['agency'] . "</h2>";
+  $details_title2 = "<strong>" . $provider_all['agency'] . "</strong>";
+  $provider_details = '<div id="deets"><h4>Provider information</h4>' . $provider_all['full_text'] .  "<p>&nbsp;</p><p><strong><a href=\"https://maps.google.com?daddr=" . $provider_all['lat'] . "," . $provider_all['long'] ."\" target=\"_blank\">Get driving directions from Google Maps</a></strong</p></div></div>" ;
+ // $countycode = $provider_all['countycode'];
+  $countyname = $value2;
+  $singlemap = sd_providersearch_single_map($value1,$countycode);
+  $providervar = isset($provider_all['agency']) ? $provider_all['agency'] : NULL;
+  $checkbox= drupal_render(drupal_get_form('sd_providersearch_checkbox_action',$value1,$providervar,$countycode,$value2));
+
+
+    $now = date('Y-m');
+   $lastmonth= new DateTime("$now - 5 months");
+   $startmonth =  new DateTime("$now - 16 months");
+   $beginmonth = date_format($startmonth, 'Y-m-') . '01';
+   $endmonth = date_format($lastmonth, 'Y-m-') . '01';
+   $jobtables = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'jobtypes',$provider_all['agency']);
+ //  print_r($jobtables);
+    $agencytables = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'agency',$provider_all['agency']);
+    $hidefigs = $agencytables['clientcount'] < 5 ? TRUE : FALSE;
+    $hideindfigs = $agencytables['indclientcount'] < 5 && $agencytables['indclientcount'] > 0 ? TRUE : FALSE;
+    $hidegroupfigs = $agencytables['groupclientcount'] < 5 && $agencytables['groupclientcount'] > 0 ? TRUE : FALSE;
+    $agencyclients = $hideindfigs ? "&nbsp;&dagger;&nbsp;" : $agencytables['clientcount'];
+    $agencyclientsind = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :   $agencytables['indclientcount'];
+
+
+         $agencyclientsgroup = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :   $agencytables['groupclientcount'];
+
+
+ $countytables = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'county',$provider_all['agency']);
+     $countyclients = $countytables['clientcount'];
+
+     $countyclientsind = $countytables['indclientcount'];
+     $countyclientsgroup = $countytables['groupclientcount'];
+
+     $statetables = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'state');
+      $stateclients = $statetables['clientcount'];
+          $stateclientsind = $statetables['indclientcount'];
+          $stateclientsgroup = $statetables['groupclientcount'];
+
+       $agencyclientsindpct = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :  sprintf("%.1f%%", ($agencyclients != 0 ? ($agencyclientsind/$agencyclients) * 100 : 0));
+       $agencyclientsgrouppct = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" : sprintf("%.1f%%", ($agencyclients != 0 ? ($agencyclientsgroup/$agencyclients) * 100 : 0));
+
+
+       $countyclientsindpct = sprintf("%.1f%%", ($countyclients != 0 ? ($countyclientsind/$countyclients) * 100 : 0));
+       $countyclientsgrouppct = sprintf("%.1f%%", ($countyclients != 0 ? ($countyclientsgroup/$countyclients) * 100 : 0 ));
+
+
+       $stateclientsindpct = sprintf("%.1f%%", ($stateclients != 0 ? ($stateclientsind/$stateclients) * 100 : 0));
+       $stateclientsgrouppct = sprintf("%.1f%%", ($stateclients != 0 ? ($stateclientsgroup/$stateclients) * 100 : 0));
+
+
+
+   setlocale(LC_MONETARY, 'en_US.UTF-8');
+$agencyclientswage = $hidefigs ? "&nbsp;&dagger;&nbsp;" :  money_format('%.2n', $agencytables['totalavgwage']);
+   $agencyclientsindwage = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :  money_format('%.2n',$agencytables['indavgwage']);
+
+
+        $agencyclientsgroupwage = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :  money_format('%.2n',$agencytables['groupavgwage']);
+
+
+
+    $countyclientswage = money_format('%.2n',$countytables['totalavgwage']);
+
+    $countyclientsindwage = money_format('%.2n',$countytables['indavgwage']);
+    $countyclientsgroupwage = money_format('%.2n',$countytables['groupavgwage']);
+
+     $stateclientswage = money_format('%.2n',$statetables['totalavgwage']);
+         $stateclientsindwage = money_format('%.2n',$statetables['indavgwage']);
+         $stateclientsgroupwage = money_format('%.2n',$statetables['groupavgwage']);
+
+
+$agencyclientshours = $hidefigs ? "&nbsp;&dagger;&nbsp;" :  number_format( $agencytables['totalavghours'], 1, '.', ',');
+   $agencyclientsindhours = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :  number_format($agencytables['indavghours'], 1, '.', ',');
+
+
+        $agencyclientsgrouphours = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :  number_format($agencytables['groupavghours'], 1, '.', ',');
+
+
+
+    $countyclientshours = number_format($countytables['totalavghours'], 1, '.', ',');
+
+    $countyclientsindhours = number_format($countytables['indavghours'], 1, '.', ',');
+    $countyclientsgrouphours = number_format($countytables['groupavghours'], 1, '.', ',');
+     $stateclientshours = number_format($statetables['totalavghours'], 1, '.', ',');
+         $stateclientsindhours = number_format($statetables['indavghours'], 1, '.', ',');    $stateclientsgrouphours = number_format($statetables['groupavghours'], 1, '.', ',');
+
+
+   $agency912table = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'agency912',$provider_all['agency']);
+
+   $agencyclients912 = $agency912table['9of12'];
+   $agencyclientsind912 = $agency912table['indtotal912'];
+
+
+        $agencyclientsgroup912 = $agency912table['grouptotal912'];
+
+     $county912table = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'county912');
+  $countyclients912 = $county912table['9of12'];
+
+    $countyclientsind912 = $county912table['indtotal912'];
+    $countyclientsgroup912 = $county912table['grouptotal912'];
+
+$state912table = _sd_providersearch_client_totals($value1,$beginmonth,$endmonth,$countycode,'state912');
+  $stateclients912 =  $state912table['9of12'];
+         $stateclientsind912 = $state912table['indtotal912'];    $stateclientsgroup912 = $state912table['grouptotal912'];
+
+
+   $agencyclients912pct = sprintf("%.1f%%", ($agency912table['all'] != 0 ? ($agency912table['9of12']/$agency912table['all']) * 100 : 0));
+
+
+
+        $agencyclientsgroup912pct = sprintf("%.1f%%", ($agency912table['grouptotal'] != 0 ? ($agency912table['grouptotal912']/$agency912table['grouptotal']) * 100 : 0));
+
+   $agencyclientsind912pct = sprintf("%.1f%%", ($agency912table['indtotal'] != 0 ? ($agency912table['indtotal912']/$agency912table['indtotal']) * 100 : 0));
+
+  $countyclients912pct = sprintf("%.1f%%", ($county912table['all'] != 0 ? ($county912table['9of12']/$county912table['all']) * 100 : 0));
+
+    $countyclientsind912pct = sprintf("%.1f%%", ($county912table['indtotal'] != 0 ? ($county912table['indtotal912']/$county912table['indtotal']) * 100 : 0));
+
+    $countyclientsgroup912pct = sprintf("%.1f%%", ($county912table['grouptotal'] != 0 ? ($county912table['grouptotal912']/$county912table['grouptotal']) * 100 : 0));
+
+     $stateclients912pct = sprintf("%.1f%%", ($state912table['all'] != 0 ? ($state912table['9of12']/$state912table['all']) * 100 : 0));
+
+         $stateclientsind912pct = sprintf("%.1f%%", ($state912table['indtotal'] != 0 ? ($state912table['indtotal912']/$state912table['indtotal']) * 100 : 0));
+      $stateclientsgroup912pct = sprintf("%.1f%%", ($state912table['grouptotal'] != 0 ? ($state912table['grouptotal912']/$state912table['grouptotal']) * 100 : 0));
+
+
+
+
+$captionyear = date_format($lastmonth, 'F, Y');
+$captionbeginyear = date_format($startmonth, 'F, Y');
+$firsttable = "<table class=\"providerResult\"><caption>Number of people working for pay: $captionyear</caption><tr><th rowspan=\"2\"></th><th colspan=\"3\">Number of People</th><th colspan=\"2\">Percent of Total</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>Total</th><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div></tr>
+
+<tr><th>Agency: " . $provider_all['agency'] . "&#42;" . "</th><td>$agencyclientsind</td><td>$agencyclientsgroup</td><td>$agencyclients</td><td>$agencyclientsindpct</td><td>$agencyclientsgrouppct</td></tr>
+
+<tr><th>County: $countyname</th><td>$countyclientsind</td><td>$countyclientsgroup</td><td>$countyclients</td><td>$countyclientsindpct</td><td>$countyclientsgrouppct</td></tr>
+
+<tr><th>State</th><td>$stateclientsind</td><td>$stateclientsgroup</td><td>$stateclients</td><td>$stateclientsindpct</td><td>$stateclientsgrouppct</td></tr></table><p><em>&#42; " . $provider_all['agency'] . " clients in $countyname County only.</em>" . ($hidefigs || $hideindfigs || $hidegroupfigs ? "<br><em>&dagger; symbol indicates less than 5 individuals served.  Figures have not been provided to protect individual privacy.</em>" : "") . "</p>";
+
+
+$secondtable = "<table class=\"providerResult\"><caption>Average weekly wages: $captionyear</caption><tr><th rowspan=\"2\"></th><th colspan=\"3\">Average weekly wages</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>All Job Types</th></tr>
+
+<tr><th>Agency: " . $provider_all['agency'] . "&#42;" . "</th><td>$agencyclientsindwage</td><td>$agencyclientsgroupwage</td><td>$agencyclientswage</td></tr>
+
+<tr><th>County: $countyname</th><td>$countyclientsindwage</td><td>$countyclientsgroupwage</td><td>$countyclientswage</td></tr>
+
+<tr><th>State</th><td>$stateclientsindwage</td><td>$stateclientsgroupwage</td><td>$stateclientswage</td></tr></table><p><em>&#42; " . $provider_all['agency'] . " clients in $countyname County only.</em>" . ($hidefigs || $hideindfigs || $hidegroupfigs ? "<br><em>&dagger; symbol indicates less than 5 individuals served.  Figures have not been provided to protect individual privacy.</em>" : "") . "</p>";
+
+
+$thirdtable = "<table class=\"providerResult\"><caption>Average weekly hours: $captionyear</caption><tr><th rowspan=\"2\"></th><th colspan=\"3\">Average weekly hours</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>All work settings</th></tr>
+
+<tr><th>Agency: " . $provider_all['agency'] . "&#42;" . "</th><td>$agencyclientsindhours</td><td>$agencyclientsgrouphours</td><td>$agencyclientshours</td></tr>
+
+<tr><th>County: $countyname</th><td>$countyclientsindhours</td><td>$countyclientsgrouphours</td><td>$countyclientshours</td></tr>
+
+<tr><th>State</th><td>$stateclientsindhours</td><td>$stateclientsgrouphours</td><td>$stateclientshours</td></tr></table><p><em>&#42; " . $provider_all['agency'] . " clients in $countyname County only.</em>" . ($hidefigs || $hideindfigs || $hidegroupfigs  ? "<br><em>&dagger; symbol indicates less than 5 individuals served.  Figures have not been provided to protect individual privacy.</em>" : "") . "</p>";
+$fourthtable = "<table class=\"providerResult\"><caption>Number of people working 9 of the last 12 months: $captionbeginyear through $captionyear</caption><tr><th rowspan=\"2\">&nbsp;</th><th colspan=\"3\">Number of people</th><th colspan=\"3\">Percent of total clients working 9 of 12 months</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>Individual and Group</th><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>Individual and Group</th></tr>
+
+<tr><th>Agency: " . $provider_all['agency'] . "&#42;" . "</th><td>$agencyclientsind912</td><td>$agencyclientsgroup912</td><td>$agencyclients912</td><td>$agencyclientsind912pct</td><td>$agencyclientsgroup912pct</td><td>$agencyclients912pct</td></tr>
+
+<tr><th>County: $countyname</th><td>$countyclientsind912</td><td>$countyclientsgroup912</td><td>$countyclients912</td><td>$countyclientsind912pct</td><td>$countyclientsgroup912pct</td><td>$countyclients912pct</td></tr>
+
+<tr><th>State</th><td>$stateclientsind912</td><td>$stateclientsgroup912</td><td>$stateclients912</td><td>$stateclientsind912pct</td><td>$stateclientsgroup912pct</td><td>$stateclients912pct</td></tr></table><p><em>&#42; " . $provider_all['agency'] . " clients in $countyname County only.</em></p>";
+
+$jobtest = array_filter($jobtables);
+
+if(count($jobtables) > 0) {
+$jobcount = 0;
+foreach ($jobtables as $jobrow) {
+$jobcount = $jobcount + $jobrow[1];
+}
+
+foreach ($jobtables as $jobrow) {
+$jobpercent = sprintf("%.1f%%", ($jobrow[1]/$jobcount) * 100);
+$allrows .= "<tr><th>" . $jobrow[0] . "</th><td>" . $jobrow[1] . "</td><td>$jobpercent</td></tr>";
+
+}
+
+
+$fifthtable = "<table class=\"providerResult botTabl\"><caption>Types of individual integrated jobs held by clients of " . $provider_all['agency'] . " in $countyname County during $captionyear</caption><tr><th>Job Type</th><th>Number with job type</th><th>Percent with job type</th></tr>$allrows<tr class=\"totalRow\"><th>Total: All reported job types</th><td>$jobcount</td><td>100%</td></tr></table>"; }
+else { $fifthtable = "<p>No job type data available for this agency.</p>";}
+
+
+$pos = strrpos($_SERVER['HTTP_REFERER'], "result");
+
+if ($pos == true) $backtext = "Return to list of providers."; else $backtext = "Return to the search page.";
+   $backlink = "<p><strong><a href=\"" . $_SERVER['HTTP_REFERER'] . "\">$backtext</a></strong></p>";
+   $comparecheck = "<div class=\"compareCheck clearfix\"> $checkbox <div class=\"checkText\">Add this provider to your comparison list.</div></div>";
+
+ $build['profiletext'] = array(
+   t('location')  => array(
+     '#markup' => $backlink.$comparecheck.$details_title . '<div id="mapDeets" class="clearfix">' . $singlemap .
+$provider_details .  $firsttable . $secondtable . $thirdtable . $fourthtable . $fifthtable),
+     );
+      $build['profiletext']['#attached'] = array( 'css' => array(
+    drupal_get_path('module', 'sd_providersearch') . '/providersearch.css',
+    drupal_get_path('module', 'sd_providersearch') . '/MarkerCluster.css',  drupal_get_path('module', 'sd_providersearch') . '/MarkerCluster.Default.css', drupal_get_path('module', 'sd_providersearch') . '/leaflet.css'),
+  'js' => array(drupal_get_path('module', 'sd_providersearch') . '/leaflet.js', drupal_get_path('module', 'sd_providersearch') . '/leaflet.markercluster.js')
+);
+return $build;
+}
+
+
+
+
+ function sd_providersearch_agency_comparison() {
+if(empty($_SESSION['compareids']))
+ { $build['sometext'] = array( drupal_set_message(t("No agencies selected for comparison.  Please search again using the form on the left and check the boxes next to agency names to build a comparison list")));
+return $build; } else
+{ $providernos = array();
+$provcounty = array();
+$providernos = $_SESSION['compareids'];
+$countyarray = $_SESSION['compareids_cty'];
+for($i = 0; $i < count($countyarray); $i++) {
+foreach($countyarray[$i] as $key => $value) {
+if(in_array($key,$providernos)){
+$provcounty[] = array($key =>$value);
+}
+}
+}
+    $now = date('Y-m');
+   $lastmonth= new DateTime("$now - 5 months");
+   $startmonth =  new DateTime("$now - 16 months");
+   $beginmonth = date_format($startmonth, 'Y-m-') . '01';
+   $endmonth = date_format($lastmonth, 'Y-m-') . '01';
+$captionyear = date_format($lastmonth, 'F, Y');
+$captionbeginyear = date_format($startmonth, 'F, Y');
+$firsttable = "<table class=\"providerResult\"><caption>Number of people working for pay: $captionyear</caption><tr><th rowspan=\"2\">Agency Name and County</th><th colspan=\"3\">Number of People</th><th colspan=\"2\">Percent of Total</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>Total</th><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div></tr>";
+
+
+$secondtable = "<table class=\"providerResult\"><caption>Average weekly wages: $captionyear</caption><tr><th rowspan=\"2\">Agency and County</th><th colspan=\"3\">Average weekly wages</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>All Job Types</th></tr>";
+
+$thirdtable = "<table class=\"providerResult\"><caption>Average weekly hours: $captionyear</caption><tr><th rowspan=\"2\">Agency and County</th><th colspan=\"3\">Average weekly hours</th></tr>
+<tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>All work settings</th></tr>";
+
+$fourthtable = "<table class=\"providerResult\"><caption>Number of people working 9 of the last 12 months: $captionbeginyear through $captionyear</caption><tr><th rowspan=\"2\">Agency and County</th><th colspan=\"3\">Number of people</th><th colspan=\"3\">Percent of total clients working 9 of 12 months</th></tr><tr><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>Individual and Group</th><th class='hoverTh'><span class='defTerm'>Individual Supported Employment</span><div class='defPop'><p><strong>Individual Supported Employment</strong> services are individualized services necessary to help persons with developmental disabilities obtain and continue integrated, competitive employment in the in a typical community business or industry setting.  This service may include creating work opportunities through job development, support to the employee’s supervisors and/or co-workers to enable them to support the person on the job, on-the-job training, and modification of work site or tasks, employment retention and follow along support, and development of career and promotional opportunities.</p></div></th><th class='hoverTh'><span class='defTerm'>Group Supported Employment</span><div class='defPop'><p><strong>Group Supported Employment</strong> services are a part of a pathway to individual employment.  These services are supervised employment and training activities in a typical business and industry settings for groups of no more than eight (8) workers with disabilities.  Typical program examples include enclaves, mobile crews, and other business-based programs employing small groups of workers with disabilities in integrated employment.  Services are intended to be short term and should further habilitation goals that lead to competitive employment at or above minimum wage.</p></div><th>Individual and Group</th></tr>";
+ $hidefigscount = 0; $hideindfigscount = 0;$hidegroupfigs = 0;
+for($i = 0; $i < count($provcounty); $i++) { foreach($provcounty[$i] as $key => $value) {
+$thisprov = $key;
+$countyarg = $value;
+// echo"<br />Thisprov: $thisprov<br />Countyarg: $countyarg<br />";
+ $provider_all = sd_providersearch_agency_details($thisprov,$countyarg);
+   $countycode = $provider_all['countycode'];
+   $countyname = $provider_all['countyname'];
+
+
+
+    $agencytables = _sd_providersearch_client_totals($thisprov,$beginmonth,$endmonth,$countycode,'agency',$provider_all['agency']);
+    $hidefigs = $agencytables['clientcount'] < 5 ? TRUE : FALSE;
+    $hideindfigs = $agencytables['indclientcount'] < 5  && $agencytables['indclientcount'] > 0 ? TRUE : FALSE;
+    $hidegroupfigs = $agencytables['groupclientcount'] < 5  && $agencytables['groupclientcount'] > 0 ? TRUE : FALSE;
+
+    $agencyclients = $hidefigs ? "&nbsp;&dagger;&nbsp;" : $agencytables['clientcount'];
+
+    $agencyclientsind = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :   $agencytables['indclientcount'];
+
+
+         $agencyclientsgroup = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :   $agencytables['groupclientcount'];
+
+
+       $agencyclientsindpct = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :  sprintf("%.1f%%", ($agencyclientsind/$agencyclients) * 100);
+       $agencyclientsgrouppct = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :  sprintf("%.1f%%", ($agencyclientsgroup/$agencyclients) * 100);
+
+
+
+
+
+   setlocale(LC_MONETARY, 'en_US.UTF-8');
+$agencyclientswage = $hidefigs ? "&nbsp;&dagger;&nbsp;" :  money_format('%.2n', $agencytables['totalavgwage']);
+   $agencyclientsindwage = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :  money_format('%.2n',$agencytables['indavgwage']);
+
+
+        $agencyclientsgroupwage = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :  money_format('%.2n',$agencytables['groupavgwage']);
+
+
+
+
+$agencyclientshours = $hidefigs ? "&nbsp;&dagger;&nbsp;" :  number_format( $agencytables['totalavghours'], 1, '.', ',');
+   $agencyclientsindhours = $hideindfigs ? "&nbsp;&dagger;&nbsp;" :   number_format($agencytables['indavghours'], 1, '.', ',');
+
+
+        $agencyclientsgrouphours = $hidegroupfigs ? "&nbsp;&dagger;&nbsp;" :  number_format($agencytables['groupavghours'], 1, '.', ',');
+
+
+
+
+   $agency912table = _sd_providersearch_client_totals($thisprov,$beginmonth,$endmonth,$countycode,'agency912',$provider_all['agency']);
+
+   $agencyclients912 = $agency912table['9of12'];
+   $agencyclientsind912 = $agency912table['indtotal912'];
+
+
+        $agencyclientsgroup912 = $agency912table['grouptotal912'];
+
+
+   $agencyclients912pct = sprintf("%.1f%%", ($agency912table['9of12']/$agency912table['all']) * 100);
+
+
+
+        $agencyclientsgroup912pct = sprintf("%.1f%%", ($agency912table['grouptotal912']/$agency912table['grouptotal']) * 100);
+
+   $agencyclientsind912pct = sprintf("%.1f%%", ($agency912table['indtotal912']/$agency912table['indtotal']) * 100);
+
+
+$agencylink = "<a href=\"/washington/profile/$thisprov/" . $provider_all['countyname'] . "\">" . $provider_all['agency'] . "</a> (in " . $provider_all['countyname'] . " County)";
+
+$firsttable .= "<tr><th>$agencylink</th><td>$agencyclientsind</td><td>$agencyclientsgroup</td><td>$agencyclients</td><td>$agencyclientsindpct</td><td>$agencyclientsgrouppct</td></tr>";
+
+
+
+
+
+$secondtable .= "<tr><th>$agencylink</th><td>$agencyclientsindwage</td><td>$agencyclientsgroupwage</td><td>$agencyclientswage</td></tr>";
+
+
+
+$thirdtable .= "<tr><th>$agencylink</th><td>$agencyclientsindhours</td><td>$agencyclientsgrouphours</td><td>$agencyclientshours</td></tr>";
+
+$fourthtable .= "<tr><th>$agencylink</th><td>$agencyclientsind912</td><td>$agencyclientsgroup912</td><td>$agencyclients912</td><td>$agencyclientsind912pct</td><td>$agencyclientsgroup912pct</td><td>$agencyclients912pct</td></tr>";
+
+
+
+if ($hidefigs) $hidefigscount ++;
+if ($hideindfigs) $hideindfigscount ++;
+
+if ($hidegroupfigs) $hidegroupfigscount ++;
+
+
+
+  }
+  }
+ $firsttable .= "</table>" . ($hidefigscount > 0 || $hideindfigscount > 0 || $hidegroupfigscount > 0 ? "<br /><strong><em>&dagger; symbol indicates less than 5 individuals served.  Figures have not been provided to protect individual privacy.</em></strong>" : "") . "<br /> <br />";
+ $secondtable .= "</table>" . ($hidefigscount > 0 || $hideindfigscount > 0 || $hidegroupfigscount > 0  ? "<br /><strong><em>&dagger; symbol indicates less than 5 individuals served.  Figures have not been provided to protect individual privacy.</em></strong>" : "") . "<br /> <br />";
+ $thirdtable .= "</table>" . ($hidefigscount > 0 || $hideindfigscount > 0 || $hidegroupfigscount > 0  ? "<br /><strong><em>&dagger; symbol indicates less than 5 individuals served.  Figures have not been provided to protect individual privacy.</em></strong>" : "") . "<br /> <br />";
+ $fourthtable .= "</table><br /> <br />";
+ $build['profiletext'] = array(
+   t('location')  => array(
+     '#markup' =>  $firsttable . $secondtable . $thirdtable . $fourthtable,
+     ));
+      $build['profiletext']['#attached']  = array( 'css' => array(
+     drupal_get_path('module', 'sd_providersearch') . '/providersearch.css',
+   ),
+ );
+return $build;
+
+}
+}
+
+
+
+
+
+function sd_providersearch_build_in_clause ($zip_code, $range="5",$county)
+{
+
+	$count = 0;
+  $map = new map();
+	$zips = $map->sd_providersearch_get_orgs_in_range($zip_code, $range,$county);
+	$num_zips = sizeof($zips)-1;
+	if ( sizeof($zips) > 0 )
+	{ $in = '';
+		foreach( $zips as $id => $dist)
+		{
+			$in .= $id;
+			if ( isset($count) && $count < $num_zips )
+			{
+				$in .= ', ';
+			}
+			$count++;
+		}
+	}
+	if ( strlen($in) > 1 )
+	{
+		return ' OR id in ('.$in.')';
+	}
+   else { return FALSE; }
+   }
+
+function sd_providersearch_agency_details($agency_id, $county = '') {
+  $now = date('Y-m');
+ $lastmonth= new DateTime("$now - 5 months");
+ $startmonth =  new DateTime("$now - 16 months");
+ $beginmonth = date_format($startmonth, 'Y-m-') . 1;
+ $endmonth = date_format($lastmonth, 'Y-m-') . 1;
+ $query = "select * from {ps_orgs_wa} orgs LEFT JOIN {ps_cities} cities ON LOWER(`orgs`.`city`) = LOWER(`cities`.`Name`) WHERE `id` = $agency_id LIMIT 1";
+ $agency_query = db_query($query)->fetch(PDO::FETCH_ASSOC);
+
+
+ db_set_active('default');
+ $query2 = $county && $county != '' ? "SELECT `codes`.`Code` `countycode`,`codes`.`Value` `countyname` from {ps_code_lookup} codes  WHERE `codes`.`Code` = '$county'" : "SELECT COUNT(`codes`.`Code`) `countycount`,`codes`.`Code` `countycode`,`codes`.`Value` `countyname` from {ps_billing} billing LEFT JOIN {ps_code_lookup} codes on `billing`.`CountyCode` = `codes`.`Code` WHERE `ProviderNumber` = $agency_id AND `billing`.`ServiceYearMonth` >= '$beginmonth' AND `billing`.`ServiceYearMonth` <= '$endmonth' GROUP BY `codes`.`Code` ORDER BY COUNT(`codes`.`Code`) DESC LIMIT 1";
+ $agency_query2 = db_query($query2)->fetch(PDO::FETCH_ASSOC);
+
+   if (!$agency_query['city'] || $agency_query['city'] == '') { $altquery = "select * from  {ps_cities} cities  WHERE `county` = '" . $agency_query2['countyname'] . "' AND county_seat = 1 LIMIT 1";
+   $agency_query_alt = db_query($altquery)->fetch(PDO::FETCH_ASSOC);
+   $agency_query['city'] = $agency_query_alt['Name'];
+   $agency_query['longitude'] = $agency_query_alt['longitude'];
+   $agency_query['latitude'] = $agency_query_alt['latitude'];
+
+   }
+ $webaddress = "";
+
+ if(isset($agency_query['website'])) {
+ $pos = strpos($agency_query['website'], "http");
+ if($pos === false) { $webaddress = "http://" . $agency_query['website']; } else { $webaddress =  $agency_query['website']; }
+ }
+$providertext = "";
+ $providertext.= "<div class=\"provlistItem clearfix\"><div class=\"leftItem\">" . (isset($agency_query['address1']) ? $agency_query['address1'] : "") .
+(isset($agency_query['address2']) ? "<br />" . $agency_query['address2'] : "") .
+(isset($agency_query['city']) ? "<br />" .  $agency_query['city'] : "") .
+(isset($agency_query['state']) ? ", " . $agency_query['state'] : "") .
+(isset($agency_query['zip']) ? "&nbsp;&nbsp;" . $agency_query['zip'] : "") . "</div><div class=\"rightItem\">" .
+(isset($agency_query['contact']) ? "<strong>Contact Person: </strong>" . $agency_query['contact'] . "<br />" : "") .
+(isset($agency_query['contact_phone']) ? "<strong>Contact Phone: </strong>" . $agency_query['contact_phone'] . "<br />" : "") .
+(isset($agency_query['contact_tty']) ? "<strong>Contact TTY Number: </strong>" . $agency_query['contact_tty'] . "<br />" : "") .
+(isset($agency_query['contact_fax'])? "<strong>Fax Number: </strong>" . $agency_query['contact_fax'] . "<br />" : "") .
+(isset($agency_query['contact_email']) ? "<strong>Contact E-mail: </strong> <a href=\"mailto:" . $agency_query['contact_email'] . "\">" . $agency_query['contact_email'] . "</a><br />" : "") .
+(isset($agency_query['svces_offered']) ? "<strong>Services Offered: </strong> " . $agency_query['svces_offered'] . "<br />" : "") .
+(isset($agency_query['description'])? "<strong>Agency Description: </strong> " . $agency_query['description'] . "<br />" : "") .
+(isset($agency_query['website'])? "<strong><a href=\"$webaddress\" target=\"_blank\">Agency Website</a></strong>" : "") .
+"</div></div>";
+
+$agency_query['full_text'] = $providertext;
+$agency_query['countyname'] = isset($agency_query2['countyname']) ? $agency_query2['countyname'] : NULL;
+$agency_query['countycode'] = isset($agency_query2['countycode']) ? $agency_query2['countycode'] : NULL;
+$agency_query['long'] = isset($agency_query['lat']) && $agency_query['lat'] > 0 ? $agency_query['long'] : $agency_query['longitude'];
+$agency_query['lat'] = isset($agency_query['lat']) && $agency_query['lat'] > 0 ? $agency_query['lat'] : $agency_query['latitude'];
+
+return $agency_query;
+}
+
+function _sd_providersearch_client_totals($agencyid,$beginmonth,$endmonth,$countycode,$totaltype = 'state',$agencyname = 'NONE') {
+  ;
+ $where = "";
+$where2 = "";
+   switch($totaltype) {
+   case 'agency':
+  case 'jobtypes':
+   $monthspan = " `ServiceYearMonth` = '$endmonth'";
+   $where = " and `orgnames`.`agency` = '" . addslashes($agencyname) . "' and `CountyCode` = '$countycode'";
+   break;
+   case 'county':
+
+    $monthspan = " `ServiceYearMonth` = '$endmonth'";
+   $where = " and `CountyCode` = '$countycode'";
+   break;
+   case 'state':
+
+    $monthspan = " `ServiceYearMonth` = '$endmonth'";
+   $where = "";
+   break;
+   case 'agency912':
+
+    $monthspan = " `ServiceYearMonth` >= '$beginmonth' AND `ServiceYearMonth` <= '$endmonth'";
+   $where .= " and `billing`.`ProviderNumber` = $agencyid";
+   break;
+   case 'county912':
+   case 'county912pct':
+    $monthspan = " `ServiceYearMonth` >= '$beginmonth' AND `ServiceYearMonth` <= '$endmonth'";
+   $where .= " and `billing`.`CountyCode` = '$countycode'";
+   break;
+   case 'state912':
+   case 'state912pct':
+    $monthspan = " `ServiceYearMonth` >= '$beginmonth' AND `ServiceYearMonth` <= '$endmonth'";
+   $where .= "";
+   break;
+
+   }
+
+//   $numclients = 0;
+   db_set_active('default');
+
+
+
+ if($totaltype == 'agency' || $totaltype == 'county' || $totaltype == 'state')  $entries2  = "SELECT" . ($totaltype == 'agency' ? " `orgnames`.`agency`," : "") . " count(DISTINCT `ClientID`) clientcount,SUM(IF(ServiceCode = 'DV29', 1,0)) `indclientcount`,SUM(IF(ServiceCode = 'DV26', 1,0)) `groupclientcount`,`CountyCode`, SUM(`GrossWages`) `totalwagesum`,SUM(IF(ServiceCode = 'DV29', `GrossWages`,0)) `indwagesum`,SUM(IF(ServiceCode = 'DV26', `GrossWages`,0)) `groupwagesum`, SUM(`HoursPaid`) `totalhourspaid`,SUM(IF(ServiceCode = 'DV29', `HoursPaid`,0)) `indhourspaid`,SUM(IF(ServiceCode = 'DV26', `HoursPaid`,0)) `grouphourspaid` from {ps_billing} billing" . ($totaltype == 'agency' ? " LEFT JOIN {ps_orgs_wa} orgnames ON `billing`.`ProviderNumber` = orgnames.id" : "") . " WHERE$monthspan$where and (`billing`.`ServiceCode` = 'DV26' OR `billing`.`ServiceCode` = 'DV29') AND `HoursPaid` > 0";
+
+
+
+
+
+elseif ($totaltype == 'agency912' || $totaltype == 'county912' || $totaltype == 'state912')
+
+
+
+  $entries2  = "SELECT DISTINCT billing.ClientID,  count(IF(HoursPaid >0,1,0))  allemployed,IF(count(IF(HoursPaid >0,1,0)) > 8, 1,0) numninetwelve,IF(`billing`.ServiceCode = 'DV26', 1, 0) grouptotal, IF(`billing`.ServiceCode = 'DV29', 1, 0) indtotal, billing.ProviderNumber from {ps_billing} billing  WHERE$monthspan$where and (`billing`.`ServiceCode` = 'DV26' OR `billing`.`ServiceCode` = 'DV29') AND `billing`.`HoursPaid` > 0 Group By billing.ClientID";
+
+
+/* $entries2  = "SELECT DISTINCT billing.ClientID, BillingJoin.monthsemployed allemployed,IF(BillingJoin.monthsemployed > 8, 1,0) numninetwelve,IF(`billing`.ServiceCode = 'DV26', 1, 0) grouptotal, IF(`billing`.ServiceCode = 'DV29', 1, 0) indtotal, billing.ProviderNumber from {ps_billing} billing LEFT JOIN (SELECT DISTINCT ClientID,count(IF(HoursPaid >0,1,0)) monthsemployed, ProviderNumber from {ps_billing} billing WHERE$monthspan$where AND (`billing`.`ServiceCode` = 'DV26' OR `billing`.`ServiceCode` = 'DV29') AND `HoursPaid` > 0 GROUP BY ClientID) BillingJoin on billing.ClientID = BillingJoin.ClientID WHERE$monthspan$where and (`billing`.`ServiceCode` = 'DV26' OR `billing`.`ServiceCode` = 'DV29') AND `billing`.`HoursPaid` > 0 Group By billing.ClientID"; */
+
+ elseif ($totaltype == 'jobtypes')
+ $entries2 = "SELECT `orgnames`.`agency`, count(billing.ClientID) numinocc, codes.Value occname from {ps_billing} billing LEFT JOIN {ps_employment} employment on billing.ClientID = employment.ClientID LEFT JOIN {ps_code_lookup} codes on employment.JobType = codes.Code LEFT JOIN {ps_orgs_wa} orgnames ON `billing`.`ProviderNumber` = orgnames.id WHERE$monthspan$where AND employment.StartDate <= '$endmonth' AND MONTH(employment.EndDate) > MONTH('$endmonth') AND billing.ServiceCode = 'DV29' AND billing.HoursPaid > 0 AND employment.JobType IS NOT NULL AND employment.JobType != '' GROUP BY employment.JobType ORDER BY occname";
+
+
+ $runquery = db_query($entries2);
+
+
+
+
+
+
+
+
+         if ($totaltype == 'agency' || $totaltype == 'county' ||$totaltype == 'state') { $numclients = array();
+          while($result = $runquery->fetch(PDO::FETCH_ASSOC)) {
+         $numclients['clientcount'] = $result['clientcount'];
+          $numclients['indclientcount'] = $result['indclientcount'];
+           $numclients['groupclientcount'] = $result['groupclientcount'];
+
+
+           $numclients['totalavgwage'] = $result['clientcount'] != 0 ? ($result['totalwagesum']/$result['clientcount'])/4 : 0;
+           $numclients['indavgwage'] = $result['indclientcount'] != 0 ? ($result['indwagesum']/$result['indclientcount'])/4 : 0;
+$numclients['groupavgwage'] = $result['groupclientcount'] != 0 ? ($result['groupwagesum']/$result['groupclientcount'])/4 : 0;
+
+            $numclients['totalavghours'] = $result['clientcount'] != 0 ? ($result['totalhourspaid']/$result['clientcount'])/4 : 0;
+            $numclients['indavghours'] = $result['indclientcount'] != 0 ? ($result['indhourspaid']/$result['indclientcount'])/4 : 0;
+            $numclients['groupavghours'] = $result['groupclientcount'] != 0 ? ($result['grouphourspaid']/$result['groupclientcount'])/4 : 0;
+
+         }
+       //   echo "<h2>$totaltype</h2><pre>$entries2</pre>";
+          }
+
+
+
+
+
+
+      elseif ($totaltype == 'agency912' || $totaltype == 'county912' ||$totaltype == 'state912' || $totaltype == 'agency912pct' || $totaltype == 'county912pct' ||$totaltype == 'state912pct')
+
+       {
+        $numclients = array();
+       $numclients['all'] = db_query($entries2)->rowCount();
+      $numclients['9of12'] =  0;
+      $numclients['indtotal912'] = 0;
+      $numclients['grouptotal912'] = 0;
+      $numclients['indtotal'] = 0;
+      $numclients['grouptotal'] = 0;
+       while($result = $runquery->fetch(PDO::FETCH_ASSOC)) {
+     if($result['indtotal'] == 1) {  $numclients['indtotal'] ++; }
+
+      if($result['grouptotal'] == 1) {  $numclients['grouptotal'] ++; }
+
+       if($result['numninetwelve'] == 1) {  $numclients['9of12'] ++; }
+         if($result['numninetwelve'] == 1 && $result['grouptotal'] == 1) {  $numclients['grouptotal912'] ++; }
+           if($result['numninetwelve'] == 1 && $result['indtotal'] == 1) {  $numclients['indtotal912'] ++; }
+        }
+// echo "<h2>$totaltype</h2><pre>$entries2</pre>";
+
+      }
+
+
+        elseif ($totaltype == 'jobtypes')
+        {
+          $numclients = array();
+
+         while($result = $runquery->fetch(PDO::FETCH_ASSOC)) {
+         $numclients[]= array($result['occname'],$result['numinocc']);
+         }
+
+        }
+
+
+
+
+         db_set_active('default');
+        return $numclients;
+}
+
+/* function sd_providersearch_show_states($b_wrap='<p><ul>', $e_wrap='</ul></p>'  )
+{
+	global $db;
+	$states = array();
+	$states = $db->get_results("SELECT sState, sStatename,  fLat, fLong FROM `statecenter`", 'ARRAY_A');
+	if ( sizeof($states) > 0 )
+	{
+		foreach( $states as $state )
+		{
+			if (has_progs($state['sState']))
+			{
+				$the_list .= '<li><a href="detail.php?state='.$state['sState'].'">'.$state['sState'].'</a></li>';
+			}
+			else
+			{
+				$the_list .= '<li>'.$state['sState'].'</li> ';
+			}
+		}
+	}
+	if ( strlen($the_list) > 1 )
+	{
+		echo $b_wrap.$the_list.$e_wrap;
+	}
+}
+
+
+function sd_providersearch_show_statename($state )
+{
+	global $db;
+	$title = $db->get_var("SELECT sStatename  FROM `statecenter` WHERE sState = '$state'");
+	if ( strlen($title) > 1 )
+	{
+		return $title;
+	}
+}
+
+function sd_providersearch_show_agency_name($id  )
+{
+	global $db;
+	$projs = array();
+	$title = $db->get_row("SELECT * FROM PrograminState LEFT JOIN programs on programs.ID=PrograminState.prog_id LEFT JOIN staff on PrograminState.staff_id=staff.staff_id 	WHERE PrograminState.id =".$id);
+	if ( strlen($title->agency) > 1 )
+	{
+		return $title->agency;
+	}
+	else
+	{
+		return $title->prog_name;
+	}
+
+
+} */
+
+function sd_providersearch_show_agency_desc($id  )
+{
+	global $db;
+	$projs = array();
+	$title = $db->get_row("SELECT * FROM PrograminState LEFT JOIN programs on programs.ID=PrograminState.prog_id LEFT JOIN staff on PrograminState.staff_id=staff.staff_id 	WHERE PrograminState.id =".$id);
+	if ( strlen($title->agency) > 1 )
+	{
+		return $title->prog_name;
+	}
+
+
+}
+
+
+function sd_providersearch_show_towns( )
+{
+	global $db;
+	$towns = array();
+	$towns = $db->get_results('SELECT DISTINCT Name FROM `ps_cities` where state_prefix = "MA" ORDER BY Name');
+	if ( sizeof($towns) > 0 )
+	{
+		$select_box = '<label for="town">your town: </label>'.NEWLINE.TABBREAK.'<select name="town'.$opt.'" id="town'.$opt.'">'.NEWLINE;
+		$select_box .= TABBREAK.'<option value=""></option>'.NEWLINE;
+		foreach( $towns as $town )
+
+		{
+			$select_box .= TABBREAK.'<option value="'.urlencode(ucwords(strtolower($town->city))).'"';
+			$select_box .= '>'.ucwords(strtolower($town->city)).'</option>'.NEWLINE;
+			$x++;
+		}
+		$select_box .= '</select>'.NEWLINE;
+
+	}
+	if ( strlen($select_box) > 1 )
+	{
+		return $select_box;
+	}
+}
+
+function sd_providersearch_show_offices( )
+{
+	global $db;
+	$offices = array();
+	$offices = $db->get_results('SELECT *FROM `ps_reg_office`  ORDER BY `name` ASC');
+	if ( sizeof($offices) > 0 )
+	{
+		$select_box = '<label for="office">Choose your DTA service area: </label>'.NEWLINE.TABBREAK.'<select name="office" id="office">'.NEWLINE;
+		$select_box .= TABBREAK.'<option value=""></option>'.NEWLINE;
+		foreach( $offices as $office )
+
+		{
+			$select_box .= TABBREAK.'<option value="'.$office->id.'"';
+			$select_box .= '>'.ucwords(strtolower($office->name)).'</option>'.NEWLINE;
+			$x++;
+		}
+		$select_box .= '</select>'.NEWLINE;
+
+	}
+	if ( strlen($select_box) > 1 )
+	{
+		return $select_box;
+	}
+}
+
+function sd_providersearch_direction_form ()
+{
+   global $db;
+	global $org;
+	$gaddress = $org->address1.', '.$org->city.', '.$org->state.' '.$org->zip;
+	$q = str_replace(" ", "+", $gaddress);
+	$url= "https://maps.google.com/maps?f=q&hl=en&q=" . $q;
+
+	$return = '<a href="'.$url.'" target="_new" class="resultlink" style="font-weight:normal">Get directions</a><br/>';
+ 	return $return;
+}
+
+function sd_providersearch_show_org_contact_details($org) {
+   global $db;
+	$contact ="";
+	if ($org->contact) {
+		$contact .= '<div class="resultrecord">';
+		$contact .= $org->contact;
+	}
+	if ($org->contact_title) {
+		$contact .= ', ' . $org->contact_title;
+	}
+	$contact .= '<br/>';
+	if ($org->contact_phone) {
+		$contact .= 'Phone: ' . $org->contact_phone;
+		$contact .= '<br/>';
+	}
+	if ($org->contact_tty) {
+		$contact .= 'TTY: ' . $org->contact_tty;
+		$contact .= '<br/>';
+	}
+	if ($org->contact_fax) {
+		$contact .= 'Fax: ' . $org->contact_fax;
+		$contact .= '<br/>';
+	}
+	if ($org->contact_email) {
+		$contact .= 'E-Mail: <a href="mailto:'.$org->contact_email.'>' . $org->contact_email .'</a>';
+		$contact .= '<br/>';
+	}
+	if ($org->contact) {
+		$contact .= '</div>';
+	}
+	return $contact;
+}
+
+function sd_providersearch_is_in_basket ($id) {
+   global $db;
+	$return_value = false;
+	if (isset($_SESSION['basket'])) {
+		$basket = $_SESSION['basket'];
+		if (is_numeric(array_search($id,$basket, false))) {
+			$return_value = true;
+		}
+	}
+	return $return_value;
+}
+
+
+function sd_providersearch_show_org_details ($org, $for_js="0", $hide_title="0",$checkboxType = "addtolist" )
+{    global $db;
+	if ( $hide_title != '-1' )
+	{
+		$block .= '<p style="margin:0;padding:0">';
+		if ($for_js=="0" && $_REQUEST['print'] != "1") {
+			$block .= '<input type="checkbox" value="'.$org->id.'" id="result_'.$org->id.'" onclick="';
+			if ($checkboxType =="addtolist") {
+				$block .= 'updateBasket('.$org->id.')';
+			}
+			else {
+				$block .= 'ComparedIDs('.$org->id.')';
+			}
+			$block .= '"';
+
+			//check the checkbox if it is already in the basket
+			if (is_in_basket($org->id) && $checkboxType == "addtolist")  {
+				$block .= ' checked="checked" ';
+			}
+
+			$block .= ' />&nbsp;';
+		}
+		if ( $_REQUEST['print'] != "1") {
+			$block .= '<a href="index.php?from=results&summaryid='.$org->id.'" class="resultlink">'.$org->agency.'</a>';
+		}
+		else
+		{
+			$block .= '<span style="font-weight:bold">'.$org->agency.'</span>';
+		}
+		$block .= '</p>';
+	}
+
+
+	$block .= '<div class="resultrecord">';
+	$block .= $org->address1."<br />";
+	if ( $org->address2 )
+	{
+		$block .= $org->address2."<br />";
+	}
+
+	$block .= ucwords(strtolower($org->city)).', '.$org->state.' '.$org->zip."<br />";
+	if ( $org->phone )
+	{
+		$block .= $org->phone."<br />";
+	}
+
+	if ( $org->county_code && $for_js=="0" )
+	{
+		$block .= "County: " . $org->county_code."<br />";
+	}
+	if ($_REQUEST['print'] != "1")
+	{
+		$block .= direction_form();
+	}
+	//if ( $org->apointment === 'Y' )
+	//{
+	//	$block .= 'Appointment needed: Yes <br /> ';
+	//}
+	//else
+	//{
+	//	$block .= 'Appointment needed: No <br /> ';
+	//}
+	//if ( $org->languages )
+	//{
+	//	$block .= 'Other languages served: '.$org->languages."<br />";
+	//}
+	$block .= '</div>';
+	if ($_REQUEST['print'] == "1")
+		{
+			$block .= '<p>&nbsp;</p>';
+		}
+
+	//$block = '<p>'.$block.'</p>';
+	if ( $for_js == "1" )
+	{
+		return addslashes($block);
+	}
+	else
+	{
+		return $block;
+
+	}
+
+}
+function sd_providersearch_write_comparison($orgs, $count) {
+   global $db;
+	$comparison = '<br class="clear"/>';
+	$comparison .= '<div class="datadiv">
+			<table summary="Provider comparison" style="width:100%;">
+			<colgroup>
+				<col />';
+	for ($i =0; $i < $count ; $i++) {
+		$comparison .= '<col/>';
+	}
+	$comparison .= '</colgroup>
+			<thead>';
+	$comparison .="<tr>\n";
+	$comparison .="<th >Variables</th>\n";
+	$comparison .=write_comparison_headings($orgs);
+	$comparison .="</tr>\n";
+	$comparison .='	</thead>
+			<tbody>';
+	$comparison .=write_comparison_body($orgs,"numsupported", $count);
+	$comparison .=write_comparison_body($orgs,"avgwages", $count);
+	$comparison .=write_comparison_body($orgs,"avghours", $count);
+	$comparison .=write_comparison_body($orgs,"numworking", $count);
+	$comparison .=write_comparison_body($orgs,"numentering", $count);
+	$comparison .= "</tbody></table></div>";
+	return $comparison;
+}
+function sd_providersearch_write_comparison_headings($orgs) {
+   global $db;
+	$headings = "";
+	foreach( $orgs as $org )
+	{
+		$headings .= '<th >' . $org->agency . "</th>\n";
+	}
+	return $headings;
+}
+function sd_providersearch_write_comparison_body($orgs, $comparisontype, $count) {
+   global $db;
+	$comparison_body ='<tr><th class="variableHeading" style="background-color:#f6fafb;">';
+	$comparison_body .= get_title($comparisontype) .'</th>';
+	for ($i =0; $i < $count ; $i++) {
+		$comparison_body .= '<th style="background-color:#f6fafb;">&nbsp;</th>';
+	}
+	$comparison_body .='</tr>';
+	switch ($comparisontype) {
+	case "numsupported":
+	    $comparison_body .= get_row_values($orgs, $comparisontype, "Individual Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Group Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Facility-based", $count, 1);
+		break;
+	case "avgwages":
+	    $comparison_body .= get_row_values($orgs, $comparisontype, "Individual Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Group Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Facility-based", $count, 1);
+	    break;
+	case "avghours":
+	    $comparison_body .= get_row_values($orgs, $comparisontype, "Individual Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Group Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Facility-based", $count, 1);
+	    break;
+	case "numworking":
+	    $comparison_body .= get_row_values($orgs, $comparisontype, "Individual Job", $count, 1);
+		$comparison_body .= get_row_values($orgs, $comparisontype, "Group Job", $count, 1);
+	    break;
+	default:
+	    $comparison_body .= get_row_values($orgs, $comparisontype, "Number entered new individual job", $count, 1);
+		$comparison_body .= get_row_values($orgs, "servicearea", "Service Area", $count);
+	    break;
+	}
+
+	return $comparison_body;
+}
+function sd_providersearch_get_row_values($orgs, $comparisontype, $title, $count, $highlight=0) {
+   global $db;
+	$comparision_row = '<tr><th class="variableHeading">&nbsp;&nbsp;&nbsp;'.$title.'</th>';
+	$largest_index = 0;
+	$values = array();
+	$i = 0;
+
+
+
+
+	foreach( $orgs as $org )
+	{
+		$where = " vendor_id=" . $org->id . "  and reporting_period='04' ";
+		if ($comparisontype == "servicearea") {
+			$values[] = $org->county_code;
+		}
+		else {
+			$values[] = get_cell_value($comparisontype, $title, $where);
+		}
+
+		if ($comparisontype != "servicearea" && $values[$largest_index] < $values[$i]) {
+			$largest_index = $i;
+		}
+		$i++;
+	}
+	for ($j =0; $j < $i ; $j++) {
+		if ($highlight == 1 && $j == $largest_index) {
+			$comparision_row .= '<td class="highlight">';
+			if ($comparisontype == "avgwages") {
+				$comparision_row .= '$';
+			}
+			$comparision_row .= $values[$j].'</td>';
+		}
+		else {
+			$comparision_row .= '<td>';
+			if ($comparisontype == "avgwages") {
+				$comparision_row .= '$';
+			}
+			$comparision_row .= $values[$j] .'</td>';
+		}
+
+	}
+	return $comparision_row . "</tr>";
+}
+function sd_providersearch_get_title($key) {
+	$title = "";
+	switch ($key) {
+	case "numsupported":
+	    $title = "Number of people working for pay";
+	    break;
+	case "avgwages":
+	   $title = "Average weekly wages";
+	    break;
+	case "avghours":
+	    $title = "Average weekly hours";
+	    break;
+	case "numworking":
+	   $title = "Number of people working 9 of the last 12 months";
+	    break;
+	case "numentering":
+	    $title = "Number of people entering a new individual job";
+	    break;
+	}
+	return $title;
+}
+function sd_providersearch_write_summaries($id) {
+global $db;
+	$summaries = '<br class="clear"/>';
+	$summaries .= write_summary("numsupported",$id);
+	$summaries .= write_summary("avgwages",$id);
+	$summaries .= write_summary("avghours",$id);
+	$summaries .= write_summary("numworking",$id);
+//	$summaries .= write_summary("numentering",$id);
+	//$summaries .= write_additional("additional",$id);
+	return $summaries ;
+}
+function sd_providersearch_write_summary($summmarytype,$id) {
+global $db;
+
+	$title ="";
+	$divsummary = "";
+	$sql = "";
+	$title = get_title($summmarytype);
+
+
+	$divsummary = '<div class="datadiv"><a name="'.$summmarytype.'"></a>
+			<span class="title">'.$title.'</span>
+			<table summary="'.$title.'">
+			<colgroup>
+				<col />
+				<col />
+				<col />
+			</colgroup>
+			<thead>';
+
+		if ($summmarytype=="numsupported") {
+
+
+			$divsummary .="<tr><th rowspan='2' scope='col' >&nbsp;</th>\n";
+			$divsummary .="<th colspan='4' >Number of People</th>\n";
+			$divsummary .="<th colspan='4' >Percent of Total</th>\n";
+			$divsummary .="</tr>\n";
+
+			$divsummary .="<tr>\n";
+			$divsummary .="<th >Individual</th>\n";
+			$divsummary .="<th >Group</th>\n";
+			$divsummary .="<th >Facility</th>\n";
+          $divsummary .="<th >Total</th>\n";
+
+			$divsummary .="<th >Individual</th>\n";
+			$divsummary .="<th >Group</th>\n";
+			$divsummary .="<th >Facility</th>\n";
+         $divsummary .="<th >Total</th>\n";
+
+
+			$divsummary .="</tr>\n";
+		} elseif ($summmarytype=="avghours") {
+
+			$divsummary .="<tr><th rowspan='2' scope='col' >&nbsp;</th>\n";
+			$divsummary .="<th colspan=4 align=center>Average weekly hours</th>\n";
+			$divsummary .="</tr>\n";
+
+			$divsummary .="<tr>\n";
+			$divsummary .="<th align=center>Individual</th>\n";
+			$divsummary .="<th align=center>Group</th>\n";
+			$divsummary .="<th align=center>Facility</th>\n";
+         $divsummary .="<th align=center>All work settings</th>\n";
+			$divsummary .="</tr>\n";
+		} elseif ($summmarytype=="avgwages") {
+			$divsummary .="<tr><th rowspan='2' scope='col' >&nbsp;</th>\n";
+			$divsummary .="<th colspan=4 align=center>Average weekly wage</th>\n";
+			$divsummary .="</tr>\n";
+
+			$divsummary .="<tr>\n";
+			$divsummary .="<th align=center>Individual</th>\n";
+			$divsummary .="<th align=center>Group</th>\n";
+			$divsummary .="<th align=center>Facility</th>\n";
+         $divsummary .="<th align=center>All work settings</th>\n";
+			$divsummary .="</tr>\n";
+		} elseif ($summmarytype=="numentering") {
+			$divsummary .="<tr><th rowspan='2' scope='col' >&nbsp;</th>\n";
+			$divsummary .="<th colspan=2 align=center>Number of people entering a new individual job</th>\n";
+			$divsummary .="</tr>\n";
+
+			$divsummary .="<tr>\n";
+			$divsummary .="<th align=center>Number of people</th>\n";
+			$divsummary .="<th align=center>Percent of Total</th>\n";
+			$divsummary .="</tr>\n";
+		} elseif ($summmarytype=="numworking") {
+			$divsummary .="<tr><th rowspan='2' scope='col' >&nbsp;</th>\n";
+			$divsummary .="<th colspan=2 align=center>Number of people</th>\n";
+			$divsummary .="<th colspan=3 align=center>Percent of Total</th>\n";
+			$divsummary .="</tr>\n";
+
+			$divsummary .="<tr>\n";
+			$divsummary .="<th align=center>Individual</th>\n";
+			$divsummary .="<th align=center>Group</th>\n";
+			$divsummary .="<th align=center>Individual</th>\n";
+			$divsummary .="<th align=center>Group</th>\n";
+         	$divsummary .="<th align=center>Group &amp; Individ.</th>\n";
+			$divsummary .="</tr>\n";
+		}
+
+		$divsummary .='	</thead>
+			<tbody>';
+		$query = "Select county_code from ps_orgs where id =".$id;
+		$results = $db->get_row($query);
+		$county_code = $results->county_code;
+
+		$divsummary .= getRowData($summmarytype, "", '04', 0, $id); //for provider
+		$divsummary .= getRowData($summmarytype, $county_code, '04', 1, $id); //for region
+		$divsummary .= getRowData($summmarytype, "state", '04', 0, $id); //for state
+
+		$divsummary .='			</tbody>
+			</table>
+		</div>';
+	return $divsummary;
+}
+function sd_providersearch_write_additional($summmarytype,$id) {
+
+}
+
+function sd_providersearch_get_cell_value($report, $title, $provderWhere) {
+global $db;
+	$regionsql = "";
+
+	if ($report == "numsupported") {
+		if ($title == "Individual Job") {
+				$field = "HrsInd";
+		} elseif ($title == "Group Job") {
+			$field = "HrsGroup";
+		} elseif ($title == "Facility-based") {
+			$field = "HrsFac";
+		}
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and ".$field." is not null and ".$field." != 0" . $regionsql;
+
+		$results = $db->get_row($query);
+		return  $results->total;
+
+	}elseif ($report =="avghours") {
+		if ($title == "Individual Job") {
+			$field = "HrsInd";
+		} elseif ($title == "Group Job") {
+			$field = "HrsGroup";
+		} elseif ($title == "Facility-based") {
+			$field = "HrsFac";
+		}
+
+		$query = "SELECT AVG(" . $field . ") AS mean FROM ps_spec_sample where " . $provderWhere . "  and (" . $field  . " > 0 ) " . $regionsql;
+		$results = $db->get_row($query);
+		return number_format(($results->mean)/4, 1, '.', '') ;
+
+
+	} elseif ($report =="avgwages") {
+		if ($title == "Individual Job") {
+			$field = "dol_ind";
+		} elseif ($title == "Group Job") {
+			$field = "dol_Group";
+		} elseif ($title == "Facility-based") {
+			$field = "dol_Facility";
+		}
+		$results = $db->get_row("Select avg(" . $field  . ") as total from ps_spec_sample where " . $provderWhere . " and " . $field  . " is not null and " . $field  . " !=0  " . $regionsql);
+		return number_format( ($results->total)/4, 2, '.', ',');
+
+	} elseif ($report =="numworking") {
+		$comparison .= get_row_values($orgs, "servicearea", "Service Area", $count);
+
+		if ($title == "Individual Job") {
+			$field = "IndSupEmp";
+		} elseif ($title == "Group Job") {
+			$field = "GroupSupEmp";
+		}
+
+		//number individual
+		$results = $db->get_row("Select count(*) as total from ps_spec_sample where " . $provderWhere . "  and trim(".$field.") = 'Y' " . $regionsql);
+		return $results->total;
+
+
+	} elseif ($report =="numentering") {
+		$results = $db->get_row("Select count(*) as total from ps_spec_sample where  " . $provderWhere . " " . $regionsql . " and NewIndJob='Y'");
+		return $results->total;
+	} else {
+		return "mistake";
+	}
+}
+/*
+function: getRowData
+purpose: outputs a row in the report
+*/
+function sd_providersearch_getRowData($report, $region, $year ="04", $showregion = 0, $vendor_id = 0) {
+	global $db;
+	$sRegion = $region;
+	$rowhtml = "";
+//	echo "1<br>";
+//echo $sRegion ;
+	if ($region == "ALL") {
+		$regionsql = " ";
+//	echo "2<br>";
+	} else {
+//	echo "3<br>";
+		if ($region != "" ) {
+//		echo "4<br>";
+			if($region =="state") {
+				$regionsql = "  ";
+			} else {
+//			echo "8<br>";
+				$regionsql = " and region='". $region ."' ";
+			}
+		}
+	}
+	$regionsql = $regionsql . " and reporting_period='" . $year . "' ";
+
+	$rowhtml .= "<tr>\n";
+	if ($showregion == 1) {
+		$rowhtml .= "<td nowrap><nobr><strong>County: " . $sRegion ."&nbsp;</strong></nobr></td>\n";
+	}
+	elseif ($region == "state") {
+		$rowhtml .= "<td nowrap><nobr><b>State&nbsp;</b></nobr></td>\n";
+	}
+	else {
+		$rowhtml .= "<td nowrap><nobr><b>Agency&nbsp;</b></nobr></td>\n";
+	}
+//	echo "11<br>";
+
+	if ($region == "") {
+		$provderWhere = "vendor_id=" . $vendor_id . " ";
+	} else {
+		$provderWhere = " 1 = 1 ";
+	}
+
+	//total servedd
+	$query = "Select count(*) as total from ps_spec_sample where  " . $provderWhere . " " . $regionsql;
+
+	$results = $db->get_row($query);
+	$total = $results->total;
+	//echo "<td>&nbsp;" .$total ."</td>\n";
+	//if ($year !="ALL" && $year !="04" && $year !="05" ) {
+	//	//Number entered a new individual job in the previous 12 months
+	//	$query = "Select count(*) as total from spec_sample where  " . $provderWhere . " " . $region . " and NewIndJob='Y'";
+	//	//	echo $query ."<br>";
+	//	$results = $db->get_row($query);
+	//	$total_12month = $results->total;
+	//	echo "<td>&nbsp;" .$total_12month ."</td>\n";
+	//}
+
+	if ($report == "numsupported") {
+
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and HrsInd is not null and HrsInd != 0" . $regionsql;
+		$results = $db->get_row($query);
+		$HrsInd = $results->total;
+		$rowhtml .= "<td>&nbsp;" . $HrsInd ."</td>\n";
+
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and HrsGroup is not null and HrsGroup != 0" . $regionsql;
+		$results = $db->get_row($query);
+		$HrsGroup = $results->total;
+		$rowhtml .= "<td>&nbsp;" . $HrsGroup ."</td>\n";
+
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and HrsFac is not null and HrsFac != 0" . $regionsql;
+		$results = $db->get_row($query);
+		$HrsFac = $results->total;
+		$rowhtml .= "<td>&nbsp;" . $HrsFac ."</td>\n";
+
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . $regionsql;
+		$results = $db->get_row($query);
+		$HrsTtl = $results->total;
+		$rowhtml .= "<td>&nbsp;" . $HrsTtl ."</td>\n";
+
+
+
+
+		if ($total != 0 ) {
+			$rowhtml .= "<td>&nbsp;" . number_format(($HrsInd/$total)*100, 1, '.', '') ."%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;" . 0 ."</td>\n";
+		}
+
+
+		if ($total != 0 ) {
+			$rowhtml .= "<td>&nbsp;" . number_format(($HrsGroup/$total)*100, 1, '.', '') ."%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;" . 0 ."</td>\n";
+		}
+
+
+		if ($total != 0 ) {
+			$rowhtml .= "<td>&nbsp;" . number_format(($HrsFac/$total)*100, 1, '.', '') ."%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;" . 0 ."</td>\n";
+		}
+
+		if ($total != 0 ) {
+			$rowhtml .= "<td>&nbsp;100%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;" . 0 ."</td>\n";
+		}
+
+	}elseif ($report =="avghours") {
+		$columArray[] = 'HrsInd';
+		$columArray[] = 'HrsGroup';
+		$columArray[] = 'HrsFac';
+		$hrstotal = 0;
+
+		for($i=0; $i<count($columArray); $i++) {
+			//$query = "SELECT AVG(" . $columArray[$i] . ") AS mean FROM spec_sample where " . $provderWhere . "  and (" . $columArray[$i] . " > 0 or " . $columArray[$i] . " = 0) " . $region;
+			$query = "SELECT AVG(" . $columArray[$i] . ") AS mean, SUM(" . $columArray[$i] . ") as hrstotal FROM ps_spec_sample where " . $provderWhere . "  and (" . $columArray[$i] . " > 0 ) " . $regionsql;
+			//echo $query;
+		//	echo "<td>&nbsp;" .$query ."</td>";
+			$results = $db->get_row($query);
+         $hrsvar = $results->mean/4;
+         $totalvar = $results->hrstotal/4;
+         $hrstotal = $hrstotal + $totalvar;
+			$rowhtml .= "<td>&nbsp;" . number_format($hrsvar, 1, '.', '') . "</td>\n";
+		}
+
+      $results = $db->get_row("Select count(*) as alltotal from ps_spec_sample where " . $provderWhere . " and ((" . $columArray[0] . " > 0) OR (" . $columArray[1] . " > 0) OR (" . $columArray[2] . " > 0))  " . $regionsql);
+     $totalind = $results->alltotal;
+  	$rowhtml .= "<td>&nbsp;" . number_format( ($hrstotal/$totalind), 1, '.', ',')
+       ." </td>\n";
+		if (false) {
+			for($i=0; $i<count($columArray); $i++) {
+				$query = "Select sum(" . $columArray[$i] . ") as part from ps_spec_sample where " . $provderWhere . " and " . $columArray[$i] . " > 0" . $regionsql;
+
+				$results = $db->get_row($query);
+				$part = $results->part;
+
+				$query = "Select sum(totalHours) as total from ps_spec_sample where " . $provderWhere . "  and (" . $columArray[$i] . " > 0 or " . $columArray[$i] . " = 0) " . $regionsql;
+
+				$results = $db->get_row($query);
+				$total = $results->total;
+
+				if ($total != 0 ) {
+
+					$rowhtml .= "<td>&nbsp;" . number_format(($part/$total)*100, 1, '.', '') . "%</td>\n";
+				} else {
+					$rowhtml .= "<td>&nbsp;" . 0 . "</td>\n";
+				}
+			}
+		}
+	} elseif ($report =="avgwages") {
+		$columWagesArray[] = 'dol_ind';
+		$columWagesArray[] = 'dol_Group';
+		$columWagesArray[] = 'dol_Facility';
+      $wagestotal = 0;
+		for($i=0; $i<count($columWagesArray); $i++) {
+			$results = $db->get_row("Select avg(" . $columWagesArray[$i] . ") as total, SUM(" . $columWagesArray[$i] . ") as totalwages from ps_spec_sample where " . $provderWhere . " and " . $columWagesArray[$i] . " is not null and ". $columWagesArray[$i] . " !=0  " . $regionsql);
+         $wagesvar = $results->totalwages/4;
+         $resultsvar = $results->total/4;
+			$rowhtml .= "<td>&nbsp;\$" . number_format( $resultsvar, 2, '.', ',')
+          ."</td>\n";
+
+         $wagestotal = $wagestotal + $wagesvar;
+		}
+
+    $results = $db->get_row("Select count( *) as alltotal from ps_spec_sample where " . $provderWhere . " and ((" . $columWagesArray[0] . " is not null and ". $columWagesArray[0] . " !=0) OR (" . $columWagesArray[1] . " is not null and ". $columWagesArray[1] . " !=0) OR (" . $columWagesArray[2] . " is not null and ". $columWagesArray[2] . " !=0))  " . $regionsql);
+   $totalind = $results->alltotal;
+	$rowhtml .= "<td>&nbsp;\$" . number_format( ($wagestotal/$results->alltotal), 2, '.', ',')
+     ." </td>\n";
+
+	} elseif ($report =="numworking") {
+
+		//number individual
+		$results = $db->get_row("Select count(*) as total from ps_spec_sample where " . $provderWhere . "  and trim(IndSupEmp) = 'Y' " . $regionsql);
+
+		$rowhtml .= "<td>&nbsp;" . $results->total ."</td>\n";
+
+		//number group
+		$results = $db->get_row("Select count(*) as total from ps_spec_sample where " . $provderWhere . "  and trim(GroupSupEmp) = 'Y' " . $regionsql);
+		$rowhtml .= "<td>&nbsp;" . $results->total ."</td>\n";
+
+		//start % individual
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and trim(IndSupEmp) = 'Y'" . $regionsql;
+
+		$results = $db->get_row($query);
+		$fraction_top_ind  = $results->total;
+
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and ( trim(IndSupEmp) in ('Y','N'))" . $regionsql;
+
+		$results = $db->get_row($query);
+		$total_YN_ind  = $results->total;
+
+		if ($total_YN_ind != 0 ) {
+			$rowhtml .= "<td>&nbsp;" . number_format(($fraction_top_ind/$total_YN_ind)*100, 1, '.', '') ."%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;0</td>\n";
+		}
+
+		//start % group
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and trim(GroupSupEmp) = 'Y'" . $regionsql;
+
+		$results = $db->get_row($query);
+		$fraction_top_gp  = $results->total;
+
+		$query = "Select count(*) as total from ps_spec_sample where " . $provderWhere . " and ( trim(GroupSupEmp) in ('Y','N'))" . $regionsql;
+
+		$results = $db->get_row($query);
+		$total_YN_gp  = $results->total;
+
+		if ($total_YN_gp != 0 ) {
+			$rowhtml .= "<td>&nbsp;" . number_format(($fraction_top_gp/$total_YN_gp)*100, 1, '.', '') ."%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;0</td>\n";
+		}
+		$totaltop = ($fraction_top_gp + $fraction_top_ind);
+      $totaldenom = ($total_YN_gp + $total_YN_ind);
+		if ($totaldenom != 0 ) {
+			$rowhtml .= "<td>&nbsp;" . number_format(($totaltop/$totaldenom)*100, 1, '.', '') ."%</td>\n";
+		} else {
+			$rowhtml .= "<td>&nbsp;0</td>\n";
+		}
+
+	} elseif ($report =="numentering") {
+		$results = $db->get_row("Select count(*) as total from ps_spec_sample where  " . $provderWhere . " " . $regionsql . " and NewIndJob='Y'");
+		$totalnum = $results->total;
+		$rowhtml .= "<td>&nbsp;" .  $totalnum ."</td>\n";
+		$rowhtml .= "<td>&nbsp;" . number_format(($totalnum/$total)*100, 1, '.', '') . "%</td>\n";
+	}
+	$rowhtml .= "</tr>\n";
+	return $rowhtml;
+}
+
+
+
+function sd_providersearch_block_info() {
+  // This hook returns an array, each component of which is an array of block
+  // information. The array keys are the 'delta' values used in other block
+  // hooks.
+
+  // The required block information is a block description, which is shown
+  // to the site administrator in the list of possible blocks. You can also
+  // provide initial settings for block weight, status, etc.
+
+  // Many options are defined in hook_block_info():
+  $blocks['providersearch_form'] = array(
+    // info: The name of the block.
+    'info' => t('Washington Provider search form'),
+
+  );
+
+
+  $blocks['compareform'] = array(
+    // info: The name of the block.
+    'info' => t('Your provider comparison list'),
+
+  );
+
+
+  return $blocks;
+}
+
+
+
+/**
+ * Implements hook_block_view().
+ *
+ * This hook generates the contents of the blocks themselves.
+ */
+function sd_providersearch_block_view($delta = '') {
+  //The $delta parameter tells us which block is being requested.
+  switch ($delta) {
+
+    case 'providersearch_form':
+      $block['subject'] = t('Provider search form');
+      $block['content'] = drupal_get_form('sd_providersearch_intro');
+      break;
+ case 'compareform':
+ $block['subject'] = t('Your provider comparison list');
+    $block['content'] = drupal_get_form('sd_providersearch_compare_form');
+    break;
+
+  }
+  return $block;
+}

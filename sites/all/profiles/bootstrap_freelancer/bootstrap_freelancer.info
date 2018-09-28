@@ -1,0 +1,85 @@
+name = Bootstrap Freelancer
+description = A one page Bootstrap portfolio theme
+core = 7.x
+distribution_name = Bootstrap Freelancer
+exclusive = 1
+
+; Core
+dependencies[] = block
+dependencies[] = color
+dependencies[] = comment
+dependencies[] = contact
+dependencies[] = contextual
+dependencies[] = dashboard
+dependencies[] = field
+dependencies[] = field_sql_storage
+dependencies[] = field_ui
+dependencies[] = file
+dependencies[] = filter
+dependencies[] = help
+dependencies[] = image
+dependencies[] = list
+dependencies[] = menu
+dependencies[] = node
+dependencies[] = number
+dependencies[] = options
+dependencies[] = path
+dependencies[] = rdf
+dependencies[] = search
+dependencies[] = shortcut
+dependencies[] = statistics
+dependencies[] = taxonomy
+dependencies[] = text
+dependencies[] = update
+dependencies[] = dblog
+dependencies[] = system
+
+
+; Administration
+dependencies[] = admin_menu
+dependencies[] = admin_menu_toolbar
+
+; Chaos tool suite
+dependencies[] = ctools
+
+; Context
+dependencies[] = context
+
+; Features
+dependencies[] = features
+
+;Node export
+dependencies[] = node_export
+
+; Other
+dependencies[] = libraries
+dependencies[] = nodeblock
+
+; Template API
+dependencies[] = template_api
+dependencies[] = template_chooser
+dependencies[] = template_field
+dependencies[] = template_mustache
+
+; User Interface
+dependencies[] = jquery_update
+
+;UUID
+dependencies[] = uuid
+
+; Bootstrap Freelancer
+dependencies[] = bootstrap_freelancer_common
+
+; Information added by Drupal.org packaging script on 2015-02-28
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "bootstrap_freelancer"
+datestamp = "1425121682"
+
+
+; Information added by Drupal.org packaging script on 2015-03-03
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "bootstrap_freelancer"
+datestamp = "1425410576"
+

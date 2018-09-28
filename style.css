@@ -1,0 +1,18 @@
+.logo {  font-family: Verdana, Arial, Helvetica, sans-serif}
+.header { background-color: #666666; color: #FFFFFF; text-align: right; font-family: Verdana, Arial, Helvetica, sans-serif}
+.side {  color: #000000; background-color: #FFFFFF; border-color: black #000000 black black; font-family: Verdana, Arial, Helvetica, sans-serif; font-size: 12px; border-style: solid; border-top-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-left-width: 0px}
+.nav { background-color: #333333; color: #FFFFFF; font-family: Verdana, Arial, Helvetica, sans-serif; font-size: 12px}
+.copyright {  color: #FFFFFF; background-color: #000000; font-weight: bold; font-family: Verdana, Arial, Helvetica, sans-serif}
+.heading {  color: #000000; font-size: 24px; font-weight: bold}
+.content {  color: #000000; margin-top: 3px; margin-right: 3px; margin-bottom: 3px; margin-left: 3px; font-size: 14px}
+.headerbar {  background-image: url(images/extras/bar.gif)}
+.sideseparator {  background-image: url(images/extras/dark.gif)}
+	.callout{
+		background:lightblue;
+		padding:1em;
+		border:1px dashed red;
+		margin:1em 4em 1em 4em;
+	}
+.callout h1, .callout h2, .callout h3, .callout h4 {
+		color:darkblue;
+	}

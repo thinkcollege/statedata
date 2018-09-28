@@ -1,0 +1,4 @@
+name = Merci Rule
+description = Custom rules event in Drupal 7 for the Merci Reservation system
+core = 7.x
+package = Merci

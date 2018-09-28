@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the copy_committees feature.
+ */
+
+include_once 'copy_committees.features.inc';

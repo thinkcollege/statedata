@@ -1,0 +1,38 @@
+<?php
+/**
+ * @file
+ */
+
+/**
+ * Implements hook_libraries_info().
+ */
+function bootstrap_accessibility_libraries_info() {
+  $libraries['bootstrap-accessibility-plugin'] = array(
+    'name' => 'Bootstrap Accessibility Plugin',
+    'vendor url' => 'https://github.com/paypal/bootstrap-accessibility-plugin',
+    'download url' => 'https://github.com/paypal/bootstrap-accessibility-plugin/archive/v1.0.4.zip',
+    'version arguments' => array(
+      'file' => 'package.json',
+      'pattern' => '/version.*([0-9]\.[0-9]\.[0-9])/',
+      'lines' => 5,
+    ),
+    'files' => array(
+      'js' => array(
+        'plugins/js/bootstrap-accessibility.min.js',
+      ),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_preprocess_html().
+ */
+function bootstrap_accessibility_preprocess_html(&$variables) {
+  // Add bootstrap-accessibility-plugin library to the page.
+  if (($library = libraries_detect('bootstrap-accessibility-plugin')) && !empty($library['installed'])) {
+    libraries_load('bootstrap-accessibility-plugin');
+    $variables['page']['#attached']['libraries_load'][] = array('bootstrap-accessibility-plugin');
+  }
+}

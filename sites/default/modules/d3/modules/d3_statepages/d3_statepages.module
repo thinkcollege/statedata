@@ -1,0 +1,341 @@
+<?php
+/**
+ * @file
+ * D3 Statepages module file.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function d3_statepages_menu() {
+
+  $menuitems['statepages/%'] = array(
+   'title callback' => 'd3_statepages_page_title',
+     'title arguments' => array(1),
+    'description' => 'Different visualization statepages using d3.',
+    'page callback' => 'd3_statepages_states',
+'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['state-comparison'] = array(
+    'title' => 'State Comparison',
+    'description' => 'Compare state data',
+    'access callback' => TRUE,
+    'page callback' => 'd3_statepages_comparison',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $menuitems;
+}
+
+
+
+/**
+ * Generates a random statepages bar graph.
+ * @return string
+ *   HTML for the page content.
+ */
+
+
+
+
+
+
+function d3_statepages_page_title($firstparameter) {
+ if (isset($firstparameter)) {
+    $title = "State Employment Snapshot: $firstparameter";
+ } else { $title = "State Employment Snapshot"; }
+
+  return $title;
+}
+
+/* function d3_statepages_theme_registry_alter(&$theme_registry['d3']) {
+  dpm($theme_registry);
+}
+*/
+
+function d3_firstchart($firstparameter='',$dbone) {
+
+$statefigs = $dbone[0];
+$totalserved = $statefigs['total_served'] != -1 ? number_format($statefigs['total_served']) : "&nbsp;*&nbsp;";
+$integratedemployment = $statefigs['integrated_employment'] != -1 ? number_format($statefigs['integrated_employment']) : "&nbsp;*&nbsp;";
+$chartyear = $statefigs['YEAR'];
+$iepercentagerate = $statefigs['IE_percentage_rate'] != -1 ? round((100* $statefigs['IE_percentage_rate']),0) . "%" : "&nbsp;*&nbsp;";
+$totalfunding = $statefigs['total_funding'] != -1 ? "$" .number_format($statefigs['total_funding'],2) : "&nbsp;*&nbsp;";
+$employmentmoney = $statefigs['employment_money'] != -1 ? "$" . number_format($statefigs['employment_money'],2) : "&nbsp;*&nbsp;";
+$iepercent =  $statefigs['ttl_fund_IE_svcs_perc'] != -1 ?  round($statefigs['ttl_fund_IE_svcs_perc'] * 100, 1) . "%" : "&nbsp;*&nbsp;";
+
+ $argumentsnat = array(':state' => "U.S. Total");
+  $selectnat = db_select('d3_agency_mrdd', 'states');
+  $selectnat->leftJoin( 'd3_states', 'statenames', "`states`.`STATE` = `statenames`.`abbreviation`");
+  $selectnat->addField('statenames', 'name','statefullname');
+
+ $selectnat->addExpression('`states`.`Total served`', 'total_served');
+ $selectnat->addExpression('`states`.`Integrated employment`','integrated_employment');
+ $selectnat->addExpression('`states`.`Integrated employment percentage rate`', 'IE_percentage_rate');
+ $selectnat->addExpression('`states`.`Total funding`', 'total_funding');
+ $selectnat->addExpression('`states`.`employment money`', 'employment_money');
+
+ $selectnat->addExpression('(`states`.`employment money`/`states`.`Total funding`)', 'ttl_fund_IE_svcs_perc');
+$selectnat->where("YEAR = $chartyear" );
+$selectnat->where('statenames.name = :state',$argumentsnat);
+$entriesnat = $selectnat->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+
+$natfigs = $entriesnat[0];
+$totalservednat = number_format($natfigs['total_served']);
+$integratedemploymentnat = number_format($natfigs['integrated_employment']);
+$iepercentageratenat = round((100*$natfigs['IE_percentage_rate']),0);
+$totalfundingnat = $natfigs['total_funding'] != -1 ? "$" .  number_format($natfigs['total_funding']) : "&nbsp;&nbsp;";
+$employmentmoneynat = $natfigs['employment_money'] != -1 ? "$" . number_format($natfigs['employment_money']): "&nbsp;*&nbsp;";
+$iepercentnat = $natfigs['employment_money'] != -1 ? round($natfigs['ttl_fund_IE_svcs_perc'] * 100, 1) . "%": "&nbsp;*&nbsp;";
+
+$firstchart = "<h3>How many individuals participate in integrated employment services provided by the state intellectual and developmental disability agency?</h3>
+<p style=\"color: #696969\"><strong>Source:</strong> National Survey of State IDD Agency Day and Employment Services<br />
+
+<strong>Who:</strong> Individuals who receive a day or employment service funded or monitored by the state IDD agency.<br />
+
+<strong>What:</strong> Participation in integrated employment, including both individual job supports and group supported employment. Individuals may be working or be on a pathway to employment.</p>
+<table id=\"chartOne\"  class=\"stateTable\"><tr><th>&nbsp</th><th colspan =\"2\" class=\"rowOne\">$firstparameter $chartyear</th><th colspan =\"2\" class=\"rowOne\">Nation $chartyear</th></tr>
+   <tr><th class=\"colTh\">&nbsp</th><th class=\"colFig\">Number</th><th class=\"colFig rightcell\">Percent</th><th class=\"colFig Nat\">Number</th><th class=\"colFig rightcell\">Percent</th></tr>
+   <tr><th>Total in day and employment services</th><td>$totalserved</td><td class=\"rightcell\">&nbsp;&nbsp;</td><td class=\"colFig Nat\">$totalservednat</td><td class=\"rightcell\">&nbsp;&nbsp;</td></tr>
+   <tr><th>Total in integrated employment services</th><td>$integratedemployment</td><td class=\"rightcell\">$iepercentagerate</td><td class=\"colFig Nat\">$integratedemploymentnat</td><td class=\"rightcell\">$iepercentageratenat%</td></tr>
+ <tr><th>Total funding for day and employment services</th><td>" . $totalfunding ."</td><td class=\"rightcell\">&nbsp;&nbsp;</td><td class=\"colFig Nat\">".$totalfundingnat . "</td><td class=\"rightcell\">&nbsp;&nbsp;</td></tr>
+ <tr><th class=\"colTh\">Total funding for integrated employment services</th><td>$employmentmoney</td><td class=\"rightcell\">$iepercent</td><td class=\"colFig Nat\"> $employmentmoneynat</td><td class=\"rightcell\">$iepercentnat</td></tr></table>    <p><em> * = Data not available</em></p>
+   ";
+ return $firstchart;
+
+}
+
+function d3_secondchart($firstparameter= '',$entriestwo) {
+
+ $statefigs = $entriestwo[0];
+ $stateyear = $statefigs['fisc_year'];
+ $fiscfirst = $stateyear - 1;
+  $chartyear =  "$fiscfirst/$stateyear";
+ // foreach ($statefigs as $key => &$value) {if ($value == -1 ) $value = 0; }
+ $intjobperc = $statefigs['int_job_perc'] != -1 ? number_format($statefigs['int_job_perc']) . "%" : "&nbsp;*&nbsp;";
+ $intjobwages = $statefigs['int_job_wages'] != -1 ? "$" . number_format($statefigs['int_job_wages'],2) : "&nbsp;*&nbsp;";
+ $intjobhrs = $statefigs['int_job_hrs'] != -1 ?  number_format($statefigs['int_job_hrs'],1) : "&nbsp;*&nbsp;";
+$indvjobperc = $statefigs['indv_job_perc'] != -1 ?  number_format($statefigs['indv_job_perc']) . "%" : "&nbsp;*&nbsp;";
+$indvjobwages = $statefigs['indv_job_wages'] != -1 ?  "$" . number_format($statefigs['indv_job_wages'],2) : "&nbsp;*&nbsp;";
+$indvjobhrs = $statefigs['indv_job_hrs'] != -1 ?  number_format($statefigs['indv_job_hrs'],1) : "&nbsp;*&nbsp;";
+$compjobperc = $statefigs['comp_job_perc'] != -1 ?  number_format($statefigs['comp_job_perc']) . "%" : "&nbsp;*&nbsp;";
+$compjobwages = $statefigs['comp_job_wages'] != -1 ?  "$" . number_format($statefigs['comp_job_wages'],2) : "&nbsp;*&nbsp;";
+$compjobhrs = $statefigs['comp_job_hrs'] != -1 ?  number_format($statefigs['comp_job_hrs'],1) : "&nbsp;*&nbsp;";
+$indvsupjobperc = $statefigs['indv_sup_job_perc'] != -1 ?  number_format($statefigs['indv_sup_job_perc']) . "%" : "&nbsp;*&nbsp;";
+$indvsupjobwages = $statefigs['indv_sup_job_wages'] != -1 ?  "$" . number_format($statefigs['indv_sup_job_wages'],2) : "&nbsp;*&nbsp;";
+$indvsupjobhrs = $statefigs['indv_sup_job_hrs'] != -1 ?  number_format($statefigs['indv_sup_job_hrs'],1) : "&nbsp;*&nbsp;";
+$groupsupjobperc = $statefigs['group_sup_job_perc'] != -1 ?  number_format($statefigs['group_sup_job_perc']) . "%" : "&nbsp;*&nbsp;";
+$groupsupjobwages = $statefigs['group_sup_job_wages'] != -1 ?  "$" . number_format($statefigs['group_sup_job_wages'],2) : "&nbsp;*&nbsp;";
+$groupsupjobhrs = $statefigs['group_sup_job_hrs'] != -1 ?  number_format($statefigs['group_sup_job_hrs'],1) : "&nbsp;*&nbsp;";
+$empunknownperc = $statefigs['emp_unknown_perc'] != -1 ?  number_format($statefigs['emp_unknown_perc']) . "%" : "&nbsp;*&nbsp;";
+
+ $argumentsnat = array(':state' => "Nation");
+   $selectnat = db_select('d3_statesum_second', 'states');
+    $selectnat->addField('states', 'state');
+  $selectnat->addField('states', 'int_job_perc');
+  $selectnat->addField('states', 'int_job_wages');
+  $selectnat->addField('states', 'int_job_hrs');
+  $selectnat->addField('states', 'indv_job_perc');
+  $selectnat->addField('states', 'indv_job_wages');
+  $selectnat->addField('states', 'indv_job_hrs');
+  $selectnat->addField('states', 'comp_job_perc');
+  $selectnat->addField('states', 'comp_job_wages');
+  $selectnat->addField('states', 'comp_job_hrs');
+  $selectnat->addField('states', 'indv_sup_job_perc');
+  $selectnat->addField('states', 'indv_sup_job_wages');
+  $selectnat->addField('states', 'indv_sup_job_hrs');
+  $selectnat->addField('states', 'group_sup_job_perc');
+  $selectnat->addField('states', 'group_sup_job_wages');
+  $selectnat->addField('states', 'group_sup_job_hrs');
+  $selectnat->addField('states', 'emp_unknown_perc');
+ $selectnat->where('state = :state',$argumentsnat);
+ $selectnat->where("fisc_year = $stateyear" );
+ $entriesnat = $selectnat->execute()->fetchAll(PDO::FETCH_ASSOC);
+ $natfigs = $entriesnat[0];
+  $intjobpercnat = number_format($natfigs['int_job_perc']) . "%";
+  $intjobwagesnat = $natfigs['int_job_wages'] != -1 ? "$" . number_format($natfigs['int_job_wages'],2): "&nbsp;&nbsp;*";
+  $intjobhrsnat = $natfigs['int_job_hrs'] != -1 ? number_format($natfigs['int_job_hrs'],1) : "&nbsp;&nbsp;*" ;
+ $indvjobpercnat = number_format($natfigs['indv_job_perc']) . "%";
+ $indvjobwagesnat = "$" . number_format($natfigs['indv_job_wages'],2);
+ $indvjobhrsnat = number_format($natfigs['indv_job_hrs'],1);
+ $compjobpercnat = number_format($natfigs['comp_job_perc']) . "%";
+ $compjobwagesnat = "$" . number_format($natfigs['comp_job_wages'],2);
+ $compjobhrsnat = number_format($natfigs['comp_job_hrs'],1);
+ $indvsupjobpercnat = number_format($natfigs['indv_sup_job_perc']) . "%";
+ $indvsupjobwagesnat = "$" . number_format($natfigs['indv_sup_job_wages'],2);
+ $indvsupjobhrsnat = number_format($natfigs['indv_sup_job_hrs'],1);
+ $groupsupjobpercnat = number_format($natfigs['group_sup_job_perc']) . "%";
+ $groupsupjobwagesnat = "$" . number_format($natfigs['group_sup_job_wages'],2);
+ $groupsupjobhrsnat = number_format($natfigs['group_sup_job_hrs'],1);
+  $empunkownnat = number_format($natfigs['emp_unknown_perc']) . "%";
+
+$secondchart = "<h3>How many people are working for pay in an integrated job?</h3>
+ <p style=\"color: #696969\"><strong>Source:</strong> <a href=\"http://www.nationalcoreindicators.org\" target=\"_blank\">National Core Indicators Project Adult Consumer Survey</a> <br />
+
+<strong>Who:</strong> Individuals who receive any service other than/in addition to case management from the state IDD agency. Inclusion criteria varies by state.<br />
+
+<strong>What:</strong> Individuals who are reported as working for pay in an integrated job.</p>
+  <table id=\"chartTwo\" class=\"stateTable\"><tr><th>&nbsp</th><th colspan =\"3\" class=\"rowOne\">$firstparameter $chartyear</th><th colspan =\"3\" class=\"rowOne\">Nation $chartyear</th></tr>
+
+
+     <tr><th class=\"colTh\">&nbsp</th><th class=\"colFig\">Percent</th><th class=\"colFig\">Mean wages earned in 2 weeks</th><th>Mean hours worked in 2 weeks</th><th class=\"colFig Nat\">Percent</th><th class=\"colFig\">Mean wages earned in 2 weeks</th><th>Mean hours worked in 2 weeks</th></tr>
+
+
+<tr><th><span style=\"font-size: 115%;\">In an integrated job</span><br /><span style=\"font-size: 89%;font-style:italic\">individual supported job + group supported employment + competitive job</span></th><td>$intjobperc</td><td>$intjobwages</td><td>$intjobhrs</td><td class=\"colFig Nat\">$intjobpercnat</td><td>$intjobwagesnat</td><td>$intjobhrsnat</td></tr>
+
+
+<tr><th>In an individual job<br /><span style=\"font-size: 89%;font-style:italic\">individual job without or with publicly funded supports</span></th><td>$indvjobperc</td><td>$indvjobwages</td><td>$indvjobhrs</td><td class=\"colFig Nat\">$indvjobpercnat</td><td>$indvjobwagesnat</td><td>$indvjobhrsnat</td></tr>
+
+
+<tr><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;In an individual job without<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;publicly funded supports</th><td>$compjobperc</td><td>$compjobwages</td><td>$compjobhrs</td><td class=\"colFig Nat\">$compjobpercnat</td><td>$compjobwagesnat</td><td>$compjobhrsnat</td></tr>
+
+
+<tr><th class=\"colTh\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;In an individual job with<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;publicly funded supports</th><td>$indvsupjobperc</td><td>$indvsupjobwages</td><td>$indvsupjobhrs</td><td class=\"colFig Nat\">$indvsupjobpercnat</td><td>$indvsupjobwagesnat</td><td>$indvsupjobhrsnat</td></tr>
+
+
+<tr><th class=\"colTh\">In a group supported job</th><td>$groupsupjobperc</td><td>$groupsupjobwages</td><td>$groupsupjobhrs</td><td class=\"colFig Nat\">$groupsupjobpercnat</td><td>$groupsupjobwagesnat</td><td>$groupsupjobhrsnat</td></tr>
+
+<tr><th class=\"colTh\">Employment support unknown</th><td>$empunknownperc</td><td>&nbsp;*&nbsp;</td><td>&nbsp;*&nbsp;</td><td class=\"colFig Nat\">$empunkownnat</td><td>&nbsp;*&nbsp;</td><td>&nbsp;*&nbsp;</td></tr>
+</table>
+    <p><em> * = Data not available</em></p> ";
+ return $secondchart;
+}
+
+
+function d3_statepages_states($firstparameter = '') {
+
+ $argumentsone = array(':state' => "$firstparameter");
+
+ $maxstate = db_query('select MAX(`subtable`.`YEAR`), `states`.`name`  from {d3_agency_mrdd} subtable LEFT JOIN {d3_states} states on `subtable`.`STATE` = `states`.`abbreviation` where `subtable`.`Integrated employment percentage rate` != -1 and `states`.`name` = :state1', array(':state1' => "$firstparameter"))->fetchField();
+  $emptystate = db_query('select MAX(`YEAR`) from {d3_agency_mrdd}')->fetchField();
+/* $selectone = db_query("SELECT `statenames`.`name` `statefullname`, `states`.`YEAR`,`states`.`Total served` `total_served`,`states`.`YEAR`,`states`.`Integrated employment` `integrated_employment`,`states`.`Integrated employment percentage rate` `IE_percentage_rate`,`states`.`Total funding` `total_funding`,`states`.`employment money` `employment_money`,(`states`.`employment money`/`states`.`Total funding`) `ttl_fund_IE_svcs_perc` FROM {d3_agency_mrdd} `states` LEFT JOIN {d3_states} `statenames` ON `states`.`STATE` = `statenames`.`abbreviation` WHERE `states`.`YEAR` = $maxstate AND `statenames`.`name` = :state1", array(':state1' => "$firstparameter")); */
+ $selectone = db_select('d3_agency_mrdd', 'states');
+  $selectone->leftJoin( 'd3_states', 'statenames', "`states`.`STATE` = `statenames`.`abbreviation`");
+ $selectone->addField('statenames', 'name','statefullname');
+  $selectone->addField('states','YEAR');
+ $selectone->addExpression('`states`.`Total served`', 'total_served');
+ $selectone->addExpression('`states`.`Integrated employment`', 'integrated_employment');
+ $selectone->addExpression('`states`.`Integrated employment percentage rate`','IE_percentage_rate');
+ $selectone->addExpression('`states`.`Total funding`', 'total_funding');
+ $selectone->addExpression('`states`.`employment money`', 'employment_money');
+ $selectone->addExpression('(`states`.`employment money`/`states`.`Total funding`)', 'ttl_fund_IE_svcs_perc');
+
+
+$selectone->where('statenames.name = :state',$argumentsone);
+$selectone->where("YEAR = $maxstate");
+//$selectone->groupBy('states.state');
+
+
+$entriesone = isset($maxstate) ? $selectone->execute()->fetchAll(PDO::FETCH_ASSOC) :
+// array();
+array( 0 => array( 'statefullname' => '', 'YEAR' => $emptystate, 'total_served' => -1, 'integrated_employment' => -1, 'IE_percentage_rate' => -1, 'total_funding' => -1, 'employment_money' => -1, 'ttl_fund_IE_svcs_perc' => -1 ) ) ;
+
+ $argumentstwo = array(':state' => "$firstparameter");
+  $maxstate2 = db_query('select MAX(fisc_year) from {d3_statesum_second} subtable where state = :state1', array(':state1' => "$firstparameter"))->fetchField();
+
+   $emptystate2 = db_query('select MAX(fisc_year) from {d3_statesum_second}')->fetchField();
+
+  $selecttwo = db_select('d3_statesum_second', 'states');
+   $selecttwo->addField('states', 'state');
+   $selecttwo->addField(
+   'states','fisc_year');
+ $selecttwo->addField('states', 'int_job_perc');
+ $selecttwo->addField('states', 'int_job_wages');
+ $selecttwo->addField('states', 'int_job_hrs');
+ $selecttwo->addField('states', 'indv_job_perc');
+ $selecttwo->addField('states', 'indv_job_wages');
+ $selecttwo->addField('states', 'indv_job_hrs');
+ $selecttwo->addField('states', 'comp_job_perc');
+ $selecttwo->addField('states', 'comp_job_wages');
+ $selecttwo->addField('states', 'comp_job_hrs');
+ $selecttwo->addField('states', 'indv_sup_job_perc');
+ $selecttwo->addField('states', 'indv_sup_job_wages');
+ $selecttwo->addField('states', 'indv_sup_job_hrs');
+ $selecttwo->addField('states', 'group_sup_job_perc');
+ $selecttwo->addField('states', 'group_sup_job_wages');
+ $selecttwo->addField('states', 'group_sup_job_hrs');
+ $selecttwo->addField('states', 'emp_unknown_perc');
+$selecttwo->where('state = :state',$argumentstwo);
+$selecttwo->where("fisc_year = $maxstate2");
+$entriestwo = isset($maxstate2) ? $selecttwo->execute()->fetchAll(PDO::FETCH_ASSOC) : array( 0 => array( 'state' => '' ,'fisc_year' => $emptystate2 ,'int_job_perc' => -1 ,'int_job_wages' => -1, 'int_job_hrs' => -1, 'indv_job_perc' => -1 ,'indv_job_wages' => -1, 'indv_job_hrs' => -1, 'comp_job_perc' => -1, 'comp_job_wages' => -1, 'comp_job_hrs' => -1, 'indv_sup_job_perc' => -1, 'indv_sup_job_wages' => -1, 'indv_sup_job_hrs' => -1, 'group_sup_job_perc' => -1, 'group_sup_job_wages' => -1, 'group_sup_job_hrs' => -1, 'emp_unknown_perc' => -1 ) ) ;
+
+
+$chartyear = $entriesone[0]['YEAR'] != '' ? $entriesone[0]['YEAR'] : $emptystate;
+
+ $arguments = array(':year' => $chartyear);
+  $select = db_select('d3_agency_mrdd', 'states');
+
+   $select->leftJoin( 'd3_states', 'statenames', "`states`.`STATE` = `statenames`.`abbreviation`");
+  $select->addField('statenames', 'name','statefullname');
+ $select->addExpression('`states`.`Integrated employment percentage rate`', 'IE_percentage_rate');
+$select->where('YEAR= :year',$arguments);
+$select->where('states.`Total served` != -1');
+$select->orderBy('IE_percentage_rate');
+
+$entries = $select->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+
+$dbrow = array();
+$curstatefig = '';
+$natstatefig = '';
+foreach ($entries as $entry) {
+$percentage = round((100 * $entry['IE_percentage_rate']),0);
+$dbrow [] = array($entry['statefullname'], $percentage );
+if ($entry['statefullname'] == $firstparameter) { $curstatefig = $entry['IE_percentage_rate'] == -1 ? 0 : $percentage; }
+elseif ($entry['statefullname'] == "U.S. Total") { $natstatefig = $percentage; }
+
+ }
+
+// $entries = $select->execute()->fetchAll(PDO::FETCH_OBJ);
+/* if (!empty($entries)) {
+   $rows = array();
+   foreach ($entries as $entry) {
+   Sanitize the data before handing it off to the theme layer.
+     $rows[] = array_map('check_plain', $entry);
+   } */
+   $arraycontent = array();
+
+
+  if (isset($firstparameter)) {
+     $legend = "$firstparameter";
+  } else { $legend = ""; }
+if (isset($maxstate)) {
+
+ $chart = array(
+    'id' => 'visualization',
+    'type' => 'StateChart',
+     'somestuff' => d3_firstchart($firstparameter,$entriesone),
+   'somestuff_two' => d3_secondchart($firstparameter,$entriestwo),
+    'legend' => array(
+      'Percent Participating in Integrated Employment Services by State, ' . $arguments[':year'],
+      "$legend: $curstatefig%", "Nation: $natstatefig%",
+
+
+    ),
+
+    'rows' => $dbrow,
+
+  );
+  } else {
+
+   $chart = array(
+    'id' => 'visualization',
+   'type' => 'StateChart',
+     'somestuff' => d3_firstchart($firstparameter,$entriesone),
+   'somestuff_two' => d3_secondchart($firstparameter,$entriestwo),
+   'legend' => array(
+     'Percent Participating in Integrated Employment Services by State, ' . $arguments[':year'],
+     "Nation: $natstatefig%",
+     ),
+
+     'rows' => $dbrow,
+    );
+  }
+
+return d3_draw($chart);
+
+}

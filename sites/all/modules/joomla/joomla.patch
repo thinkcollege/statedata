@@ -1,0 +1,1086 @@
+diff --git a/README.TXT b/README.TXT
+index 16d8f3a..fe1cdf0 100644
+--- a/README.TXT
++++ b/README.TXT
+@@ -1,10 +1,10 @@
+ Joomla to Drupal
+ ----------------
+-This module enables the import of the following content from a Joomla 1.0.x
++This module enables the import of the following content from a Joomla 2.5.x
+ website into Drupal.
+ 
+ - Users
+-- Sections & Categories into Taxonomy Vocabularies and Terms
++- Categories into Taxonomy Terms
+ - Content items to nodes
+ 
+ Configure the module via Administer >> Site Configuration >> Joomla to Drupal,
+diff --git a/joomla.batch.inc b/joomla.batch.inc
+index 5eb6b0b..52971f8 100644
+--- a/joomla.batch.inc
++++ b/joomla.batch.inc
+@@ -3,20 +3,27 @@
+ /**
+  *
+  */
+-function joomla_batch_save($jos, $joomla_update_duplicate, &$context) {
++function joomla_batch_save($jos, $joomla_update_duplicate, &$context)
++{
+   joomla_database_init();
+   if (empty($context['sandbox'])) {
++    // groups
++    $context['results']['groups_total'] = 0;
++    $context['results']['groups_updated'] = 0;
++    $context['results']['groups_new'] = 0;
++    $context['results']['groups_failed'] = 0;
++    $context['results']['groups_duplicate'] = 0;
+     // accounts
+     $context['results']['accounts_total'] = 0;
+     $context['results']['accounts_updated'] = 0;
+     $context['results']['accounts_new'] = 0;
+     $context['results']['accounts_failed'] = 0;
+     $context['results']['accounts_duplicate'] = 0;
+-    // sections
+-    $context['results']['sections_total'] = 0;
+-    $context['results']['sections_updated'] = 0;
+-    $context['results']['sections_new'] = 0;
+-    $context['results']['sections_failed'] = 0;
++    // user groups map
++    $context['results']['maps_total'] = 0;
++    $context['results']['maps_updated'] = 0;
++    $context['results']['maps_failed'] = 0;
++    // categories
+     $context['results']['categories_total'] = 0;
+     $context['results']['categories_updated'] = 0;
+     $context['results']['categories_new'] = 0;
+@@ -35,33 +42,44 @@ function joomla_batch_save($jos, $joomla_update_duplicate, &$context) {
+     $context['sandbox']['images'] = array();
+     $context['sandbox']['progress'] = 0;
+     $context['sandbox']['joomla_update_duplicate'] = isset($joomla_update_duplicate) ? $joomla_update_duplicate : variable_get('joomla_update_duplicate', JOOMLA_UPDATE_DUPLICATE);
+-    $context['sandbox']['sections_finished'] = FALSE;
+     db_set_active('joomla');
+     $max = 0;
++    if ($jos['groups']) {
++      $max += db_query('SELECT COUNT( id ) FROM {usergroups}')->fetchField();
++    }
+     if ($jos['users']) {
+       $max += db_query('SELECT COUNT( id ) FROM {users}')->fetchField();
+     }
++    if ($jos['groups'] && $jos['users']) {
++      $max += db_query('SELECT COUNT( user_id ) FROM {user_usergroup_map}')->fetchField();
++    }
+     if ($jos['comments']) {
+       $max += db_query('SELECT COUNT( id ) FROM {jcomments}')->fetchField();
+     }
+     if ($jos['categories']) {
+-      $max += db_query('SELECT COUNT( id ) FROM {sections}')->fetchField();
+-      $max += db_query('SELECT COUNT( id ) FROM {categories}')->fetchField();
++      $max += db_query('SELECT COUNT( id ) FROM {categories} WHERE extension = \'com_content\'')->fetchField();
+     }
+     if ($jos['content']) {
+       $max += db_query('SELECT COUNT( id ) FROM {content}')->fetchField();
+     }
+     $context['sandbox']['max'] = $max;
+     db_set_active();
++    $context['sandbox']['groups_offset'] = 0;
+     $context['sandbox']['users_offset'] = 0;
++    $context['sandbox']['map_offset'] = 0;
+     $context['sandbox']['comments_offset'] = 0;
+     $context['sandbox']['categories_offset'] = 0;
+-    $context['sandbox']['sections_offset'] = 0;
+     $context['sandbox']['content_offset'] = 0;
+   }
++  if ($jos['groups']) {
++    joomla_group_save($context);
++  }
+   if ($jos['users']) {
+     joomla_user_save($context);
+   }
++  if ($jos['groups'] && $jos['users']) {
++    joomla_map_save($context);
++  }
+   if ($jos['categories']) {
+     joomla_category_save($context);
+   }
+@@ -77,18 +95,96 @@ function joomla_batch_save($jos, $joomla_update_duplicate, &$context) {
+ }
+ 
+ /**
+- *
++ * @param $context
++ */
++function joomla_group_save(&$context)
++{
++  $joomla_update_duplicate = $context['sandbox']['joomla_update_duplicate'];
++  $offset = & $context['sandbox']['groups_offset'];
++  db_set_active('joomla');
++  $groups = db_select('usergroups', 'g')
++    ->fields('g', array('id', 'title'))
++    ->range($offset, 10)
++    ->execute()
++    ->fetchAll();
++  foreach ($groups as $num => $data) {
++    $context['sandbox']['progress']++;
++    $context['results']['groups_total']++;
++    db_set_active();
++    $rid = db_query("SELECT rid FROM {joomla_roles} WHERE jgroupid = :jgroupid", array(':jgroupid' => $data->id))->fetchField();
++    if ($rid && !$joomla_update_duplicate) {
++      continue;
++    }
++
++    if ($data->id == 1 || $data->id == 2) {
++      // we force-map group 1 to role 1
++      // and          group 2 to role 2
++      $joomla_group = new stdClass();
++      $joomla_group->rid = $data->id;
++      $joomla_group->jgroupid = $data->id;
++      if ($rid) {
++        drupal_write_record('joomla_roles', $joomla_group, 'rid');
++      } else {
++        drupal_write_record('joomla_roles', $joomla_group);
++      }
++      $context['results']['groups_updated']++;
++      continue;
++    }
++
++      $role = new stdClass();
++    // Set uid if we are updating an existing record
++    if ($rid) {
++      $role->rid = $rid;
++    } else {
++      //check name to be unique
++      $duplicate = db_query_range("SELECT name FROM {role} WHERE name = :name", 0, 1, array(':name' => $data->title))->fetchField();
++      if (!empty($duplicate)) {
++        //the role already exists
++        $context['results']['groups_duplicate']++;
++        continue;
++      }
++    }
++    $role->name = $data->title;
++    $res = user_role_save($role);
++    if ($res) {
++      // Write into the joomla -> drupal role mapping table
++      $joomla_group = new stdClass();
++      $joomla_group->rid = $role->rid;
++      $joomla_group->jgroupid = $data->id;
++      if ($rid) {
++        drupal_write_record('joomla_roles', $joomla_group, 'rid');
++      } else {
++        drupal_write_record('joomla_roles', $joomla_group);
++      }
++    }
++    if ($rid && $res) {
++      $context['results']['groups_updated']++;
++    } elseif (!$rid && $res) {
++      $context['results']['groups_new']++;
++    } else {
++      $context['results']['groups_failed']++;
++    }
++    // Hook to allow other modules to modify the term
++    module_invoke_all('joomla', 'role', $role, $data);
++    $context['message'] = t('Now processing %role', array('%role' => $data->title));
++  }
++  $offset += 10;
++}
++
++/**
++ * @param $context
+  */
+-function joomla_user_save(&$context) {
++function joomla_user_save(&$context)
++{
+   $joomla_update_duplicate = $context['sandbox']['joomla_update_duplicate'];
+-  $offset = &$context['sandbox']['users_offset'];
++  $offset = & $context['sandbox']['users_offset'];
+   db_set_active('joomla');
+   $users = db_select('users', 'u')
+-  ->fields('u')
+-  ->orderBy('u.id', 'DESC')
+-  ->range($offset, 10)
+-  ->execute()
+-  ->fetchAll();
++    ->fields('u')
++    ->orderBy('u.id', 'DESC')
++    ->range($offset, 10)
++    ->execute()
++    ->fetchAll();
+   foreach ($users as $num => $data) {
+     $context['sandbox']['progress']++;
+     $context['results']['accounts_total']++;
+@@ -107,10 +203,9 @@ function joomla_user_save(&$context) {
+     // Set uid if we are updating an existing record
+     if ($uid) {
+       $account->uid = $uid;
+-    }
+-    else {
++    } else {
+       //check username to be unique
+-      $duplicate=db_query_range("SELECT name FROM {users} WHERE name = :name", 0, 1, array(':name' => $data->username ))->fetchField();
++      $duplicate = db_query_range("SELECT name FROM {users} WHERE name = :name", 0, 1, array(':name' => $data->username))->fetchField();
+       if (!empty($duplicate)) {
+         //the username already exists
+         $context['results']['accounts_duplicate']++;
+@@ -121,11 +216,11 @@ function joomla_user_save(&$context) {
+     $account->name = $data->username;
+     $account->mail = $data->email;
+     $account->status = !$data->block;
+-    $account->created = strtotime($data->registerdate);
+-    $account->access = strtotime($data->lastvisitdate);
++    $account->created = strtotime($data->registerDate);
++    $account->access = strtotime($data->lastvisitDate);
+     //no negative values
+-    $account->access= ($account->access < 0) ? NULL : $account->access;
+-    $account->created= ($account->created < 0) ? NULL : $account->created;
++    $account->access = ($account->access < 0) ? NULL : $account->access;
++    $account->created = ($account->created < 0) ? NULL : $account->created;
+     if ($real_name_field = variable_get('joomla_real_name_field', JOOMLA_REAL_NAME_FIELD)) {
+       $lang = field_language('user', $account, $real_name_field);
+       $account->{$real_name_field}[$lang][0]['value'] = $data->name;
+@@ -146,21 +241,18 @@ function joomla_user_save(&$context) {
+       $joomla_user->password = $data->password;
+       if ($uid) {
+         drupal_write_record('joomla_users', $joomla_user, 'uid');
+-      }
+-      else {
++      } else {
+         drupal_write_record('joomla_users', $joomla_user);
+       }
+     }
+     if ($uid && $res) {
+       $context['results']['accounts_updated']++;
+-    }
+-    elseif (!$uid && $res) {
++    } elseif (!$uid && $res) {
+       $context['results']['accounts_new']++;
+-    }
+-    else {
++    } else {
+       $context['results']['accounts_failed']++;
+     }
+-      // Hook to allow other modules to modify the term
++    // Hook to allow other modules to modify the term
+     module_invoke_all('joomla', 'user', $account, $data);
+     $context['message'] = t('Now processing %user', array('%user' => $data->name));
+   }
+@@ -168,160 +260,133 @@ function joomla_user_save(&$context) {
+ }
+ 
+ /**
++ * @param $context
++ */
++function joomla_map_save(&$context)
++{
++  $offset = & $context['sandbox']['maps_offset'];
++  db_set_active('joomla');
++  $groups = db_select('user_usergroup_map', 'm')
++    ->fields('m')
++    ->range($offset, 10)
++    ->execute()
++    ->fetchAll();
++  foreach ($groups as $num => $data) {
++    $context['sandbox']['progress']++;
++    $context['results']['maps_total']++;
++    db_set_active();
++    $rid = db_query("SELECT rid FROM {joomla_roles} WHERE jgroupid = :jgroupid", array(':jgroupid' => $data->group_id))->fetchField();
++    if (!$rid) {
++      drupal_set_message(t('Could not find a role for joomla group @jgid', array('@jgid' => $data->group_id)), 'error');
++      $context['results']['maps_failed']++;
++      continue;
++    }
++    $uid = db_query("SELECT uid FROM {joomla_users} WHERE juid = :juid", array(':juid' => $data->user_id))->fetchField();
++    if (!$uid) {
++      drupal_set_message(t('Could not find an account for joomla user @juid', array('@juid' => $data->user_id)), 'error');
++      $context['results']['maps_failed']++;
++      continue;
++    }
++
++    $account = user_load($uid);
++    $account->roles[$rid] = true;
++
++    $res = user_save($account);
++    if ($res) {
++      $context['results']['maps_updated']++;
++    } else {
++      $context['results']['maps_failed']++;
++    }
++    // Hook to allow other modules to modify the term
++    module_invoke_all('joomla', 'map', $account, $data);
++    $context['message'] = t('Now processing user-role map');
++  }
++  $offset += 10;
++}
++
++/**
+  *
+  */
+-function joomla_category_save(&$context) {
++function joomla_category_save(&$context)
++{
+   $joomla_update_duplicate = $context['sandbox']['joomla_update_duplicate'];
+-  $offset = &$context['sandbox']['sections_offset'];
+-  // Sections must finish before we can start importing terms
+-  $sections_finished = &$context['sandbox']['sections_finished'];
++  $cat_offset = & $context['sandbox']['categories_offset'];
+   db_set_active('joomla');
+-  $sections = db_select('sections', 's')
+-  ->fields('s')
+-  ->range($offset, 10)
+-  ->execute()
+-  ->fetchAll();
+-  $sections_finished = (bool) !$categories;
++  $categories = db_select('categories', 'c')
++    ->fields('c', array('id', 'title', 'description', 'parent_id'))
++    ->where('(extension = :extension)', array('extension' => 'com_content'))
++    ->orderBy('level', 'ASC')
++    ->range($cat_offset, 10)
++    ->execute()
++    ->fetchAll();
+   db_set_active();
+-  //Joomla Sections to Drupal
+-  foreach ($sections as $num => $section) {
++  //Process Joomla categories -> Drupal terms
++  foreach ($categories as $num => $category) {
++    $context['results']['categories_total']++;
+     $context['sandbox']['progress']++;
+-    $context['results']['sections_total']++;
+-    $vid = db_query("SELECT vid FROM {joomla_sections} WHERE jsectionid = :jsectionid", array(':jsectionid' => $section->id))->fetchField();
+-    if ($vid && !$joomla_update_duplicate) {
++    $term_map = db_query("SELECT tid FROM {joomla_categories} WHERE jcategoryid = :jcategoryid", array(':jcategoryid' => $category->id))->fetchField();
++    if ($term_map && !$joomla_update_duplicate) {
+       continue;
+     }
+-    $vocabulary = NULL;
+-    if ($vid) {
+-      $vocabulary = taxonomy_vocabulary_load($vid);
+-      if (!$vocabulary) {
+-        drupal_set_message(t('Unable to load vocabulary id @id', array('@id' => $vid)), 'error');
+-        $context['results']['sections_failed']++;
++    $term = NULL;
++    if ($term_map) {
++      $term = db_query('SELECT * FROM {taxonomy_term_data} WHERE tid = :tid', array(':tid' => $term_map))->fetch();
++      if (!$term) {
++        drupal_set_message(t('Unable to load term id @id', array('@id' => $term_map)), 'error');
++        $context['results']['categories_failed']++;
+         continue;
+       }
++    } else {
++      $term = new stdClass();
+     }
+-    else {
+-      // the vocabulary is new, we must create a new content type with term reference field
+-      $vocabulary = new stdClass();
+-    }
+-    $vocabulary->name = $section->title;
+-    if (function_exists('transliteration_get')) {
+-      $section->title = transliteration_get($section->title, '?', language_default('language'));
+-    }
+-    $vocabulary->machine_name = drupal_strtolower(str_replace(' ', '_', $section->title));
+-    $vocabulary->description = $section->description;
+-    $vocabulary->weight = $section->ordering;
+-    //check vocabulary name to be unique
+-    $duplicate = db_query_range("SELECT name FROM {taxonomy_vocabulary} WHERE machine_name = :machine_name", 0, 1, array(':machine_name' => $vocabulary->machine_name ))->fetchField();
+-    if (!empty($duplicate) && !$vid) {
+-      //the vocabulary machine_name already exists
++    $term->name = $category->title;
++    $term->description = $category->description;
++    $parent = db_query("SELECT tid FROM {joomla_categories} WHERE jcategoryid = :jcategoryid", array(':jcategoryid' => $category->parent_id))->fetchField();
++    if ($parent) {
++      $term->parent = $parent;
++    }
++    $vid = variable_get('joomla_default_category_vocabulary');
++    if (!$vid) {
++      drupal_set_message(t('The vocabulary for categories was not configured'), 'error');
++      $context['results']['categories_failed']++;
+       continue;
+     }
++    $term->vid = $vid;
+     $res = FALSE;
+-    $res = taxonomy_vocabulary_save($vocabulary);
+-    if (!$vid) {
+-            // Create an entry in the section <-> vocabulary map table
+-      $joomla_section = new stdClass();
+-      $joomla_section->vid = $vocabulary->vid;
+-      $joomla_section->jsectionid = $section->id;
+-      drupal_write_record('joomla_sections', $joomla_section);
++    $res = taxonomy_term_save($term);
++    if ($res && !$term_map) {
++      // Create an entry in the category <-> vocabulary map table
++      $joomla_category = new stdClass();
++      $joomla_category->tid = $term->tid;
++      $joomla_category->jcategoryid = $category->id;
++      drupal_write_record('joomla_categories', $joomla_category);
+     }
+     switch ($res) {
+       case SAVED_NEW:
+-        $context['results']['sections_new']++;
++        $context['results']['categories_new']++;
+         break;
+       case SAVED_UPDATED:
+-        $context['results']['sections_updated']++;
++        $context['results']['categories_updated']++;
+         break;
+       default:
+-        $context['results']['sections_failed']++;
++        $context['results']['categories_failed']++;
+         break;
+     }
+-    // Hook to allow other modules to modify the vocabulary
+-    module_invoke_all('joomla', 'taxonomy_vocabulary', $vocabulary, $section);
+-    $context['message'] = t('Now processing %section', array('%section' => $vocabulary->name));
+-  }
+-  if ($sections_finished) {
+-    $cat_offset = &$context['sandbox']['categories_offset'];
+-    db_set_active('joomla');
+-    $categories = db_select('categories', 'c')
+-    ->fields('c', array('id', 'title', 'description', 'section', 'ordering'))
+-    ->range($cat_offset, 10)
+-    ->execute()
+-    ->fetchAll();
+-    db_set_active();
+-    //Process Joomla categories -> Drupal terms
+-    foreach ($categories as $num => $category) {
+-      $context['results']['categories_total']++;
+-      $context['sandbox']['progress']++;
+-      // We have some sections that are non-integers. Ignore those.
+-      if ($category->section <= 0) {
+-        continue;
+-      }
+-      $term_map = db_query("SELECT tid,jsectionid FROM {joomla_categories} WHERE jcategoryid = :jcategoryid", array(':jcategoryid' => $category->id))->fetchField();
+-      if ($term_map && !$joomla_update_duplicate) {
+-        continue;
+-      }
+-      $term = NULL;
+-      if ($term_map) {
+-        $term = db_query('SELECT * FROM {taxonomy_term_data} WHERE tid = :tid', array(':tid' => $term_map))->fetch();
+-        if (!$term) {
+-          drupal_set_message(t('Unable to load term id @id', array('@id' => $term_map->tid)), 'error');
+-          $context['results']['categories_failed']++;
+-          continue;
+-        }
+-      }
+-      else {
+-        $term = new stdClass();
+-      }
+-      $term->name = $category->title;
+-      $term->description = $category->description;
+-      $term->weight = $category->ordering;
+-      $term->vid = db_query('SELECT vid FROM {joomla_sections} WHERE jsectionid = :section', array(':section' => $category->section))->fetchField();
+-      $res = FALSE;
+-      $res = taxonomy_term_save($term);
+-      if ($term_map) {
+-        // Check if the Joomla category's section has changed
+-        if ($term_map->jsectionid != $category->section) {
+-          $term_map->jsectionid = $category->section;
+-          drupal_write_record('joomla_categories', $term_map, 'jsectionid');
+-        }
+-      }
+-      else {
+-        // Create an entry in the section <-> vocabulary map table
+-        $joomla_category = new stdClass();
+-        $joomla_category->tid = $term->tid;
+-        $joomla_category->jsectionid = $category->section;
+-        $joomla_category->jcategoryid = $category->id;
+-        drupal_write_record('joomla_categories', $joomla_category);
+-      }
+-      switch ($res) {
+-        case SAVED_NEW:
+-          $context['results']['categories_new']++;
+-          break;
+-        case SAVED_UPDATED:
+-          $context['results']['categories_updated']++;
+-          break;
+-        default:
+-          $context['results']['categories_failed']++;
+-          break;
+-      }
+-      // Hook to allow other modules to modify the term
+-      module_invoke_all('joomla', 'term', $term, $category);
+-      $context['message'] = t('Now processing %term', array('%term' => $term->name));
+-    }
+-    $cat_offset += 10;
++    // Hook to allow other modules to modify the term
++    module_invoke_all('joomla', 'term', $term, $category);
++    $context['message'] = t('Now processing %term', array('%term' => $term->name));
+   }
+-  $offset += 10;
++  $cat_offset += 10;
+ }
+ 
+ /**
+  *
+  */
+-function joomla_content_save(&$context) {
++function joomla_content_save(&$context)
++{
+   $joomla_update_duplicate = $context['sandbox']['joomla_update_duplicate'];
+-  $images = &$context['sandbox']['images'];
+-  $offset = &$context['sandbox']['content_offset'];
++  $images = & $context['sandbox']['images'];
++  $offset = & $context['sandbox']['content_offset'];
+   db_set_active('joomla');
+   $q = db_select('content', 'cs');
+   $q->leftJoin('content_frontpage', 'cf', 'cf.content_id = cs.id');
+@@ -344,7 +409,7 @@ function joomla_content_save(&$context) {
+      */
+     $joomla_changed = strtotime($data_joomla->modified);
+     //if changed is negative drupal will throw an error so:
+-    if ($joomla_changed<0) {
++    if ($joomla_changed < 0) {
+       $joomla_changed = 0;
+     }
+     if ($content_map && $joomla_changed == $content_map->changed) {
+@@ -356,17 +421,16 @@ function joomla_content_save(&$context) {
+       $node = node_load($node->nid);
+       $node->revision = 1;
+       $node->log = 'This node was programmatically updated at ' . format_date(REQUEST_TIME, 'short', NULL, variable_get('joomla_default_language', LANGUAGE_NONE));
+-    }
+-    else {
++    } else {
+       $node->is_new = TRUE;
+       $node->log = 'Initial creation from Joomla module';
+     }
+-    $author_uid = db_query('SELECT uid FROM {joomla_users} WHERE juid = :juid', array(':juid' => $data_joomla->created_by) )->fetch();
++    $author_uid = db_query('SELECT uid FROM {joomla_users} WHERE juid = :juid', array(':juid' => $data_joomla->created_by))->fetch();
+     if ($author_uid) {
+       $node->uid = intval($author_uid->uid);
+     }
+     $node->title = $data_joomla->title;
+-    $node->status = (bool) $data_joomla->state;
++    $node->status = (bool)$data_joomla->state;
+     $node->created = strtotime($data_joomla->created);
+     //if created is negative drupal will throw an error so:
+     if ($node->created < 0) {
+@@ -375,10 +439,9 @@ function joomla_content_save(&$context) {
+     $node->language = variable_get('joomla_default_language', LANGUAGE_NONE);
+     $node->changed = $joomla_changed;
+     // Set content type
+-    if ($data_joomla->sectionid==0) {
++    if ($data_joomla->sectionid == 0) {
+       $joomla_type = variable_get('joomla_default_static_nodetype', JOOMLA_DEFAULT_STATIC_NODETYPE);
+-    }
+-    else {
++    } else {
+       $joomla_type = variable_get('joomla_default_blog_nodetype', JOOMLA_DEFAULT_BLOG_NODETYPE);
+     }
+     $node->type = $joomla_type;
+@@ -388,28 +451,23 @@ function joomla_content_save(&$context) {
+     if (!empty($data_joomla->introtext)) {
+       $joomla_body = $data_joomla->introtext . "<!--break-->" . $data_joomla->fulltext;
+       $joomla_teaser = $data_joomla->introtext;
+-    }
+-    else {
++    } else {
+       $joomla_body = $data_joomla->fulltext;
+       $joomla_teaser = text_summary($joomla_body);
+     }
+-    $joomla_body   = str_replace("{mospagebreak}", "", $joomla_body);
++    $joomla_body = str_replace("{mospagebreak}", "", $joomla_body);
+     //images
+     if ($data_joomla->images) {
+       $joomla_teaser = joomla_replace_mos_image($data_joomla->images, $joomla_teaser);
+-      $joomla_body   = joomla_replace_mos_image($data_joomla->images, $joomla_body);
++      $joomla_body = joomla_replace_mos_image($data_joomla->images, $joomla_body);
+     }
+     $joomla_teaser = joomla_replace_image_link($joomla_teaser);
+-    $joomla_body   = joomla_replace_image_link($joomla_body);
++    $joomla_body = joomla_replace_image_link($joomla_body);
+     $lang = field_language('node', $node, NULL, $node->language);
+     $node->body[$lang['body']][0]['summary'] = $joomla_teaser;
+     $node->body[$lang['body']][0]['value'] = $joomla_body;
+     $node->body[$lang['body']][0]['format'] = variable_get('joomla_input_format', JOOMLA_INPUT_FORMAT);
+-    $tid = db_query('SELECT tid FROM {joomla_categories} WHERE jcategoryid = :jcategoryid AND jsectionid = :jsectionid',
+-                    array(
+-                      ':jcategoryid' => $data_joomla->catid,
+-                      ':jsectionid' => $data_joomla->sectionid,
+-                    ))->fetchField();
++    $tid = db_query('SELECT tid FROM {joomla_categories} WHERE jcategoryid = :jcategoryid', array(':jcategoryid' => $data_joomla->catid))->fetchField();
+     if ($tid) {
+       $vid = db_query('SELECT vid FROM {taxonomy_term_data} WHERE tid = :tid', array(':tid' => $tid))->fetchField();
+       $vocabulary = taxonomy_vocabulary_load($vid);
+@@ -421,8 +479,7 @@ function joomla_content_save(&$context) {
+     // Promote to front page?
+     if ($data_joomla->content_id) {
+       $joomla_promote = 1;
+-    }
+-    else {
++    } else {
+       $joomla_promote = 0;
+     }
+     $node->promote = $joomla_promote;
+@@ -436,11 +493,9 @@ function joomla_content_save(&$context) {
+     }
+     if (!$content_map && $node->nid) {
+       $context['results']['content_new']++;
+-    }
+-    elseif ($content_map && $node->nid) {
++    } elseif ($content_map && $node->nid) {
+       $context['results']['content_updated']++;
+-    }
+-    else {
++    } else {
+       $context['results']['content_failed']++;
+     }
+     // Hook to allow other modules to modify the node
+@@ -453,16 +508,17 @@ function joomla_content_save(&$context) {
+ /**
+  *
+  */
+-function joomla_comment_save(&$context) {
++function joomla_comment_save(&$context)
++{
+   $joomla_update_duplicate = $context['sandbox']['joomla_update_duplicate'];
+-  $offset = &$context['sandbox']['comments_offset'];
++  $offset = & $context['sandbox']['comments_offset'];
+   db_set_active('joomla');
+   $jcomments = db_select('jcomments', 'jc')
+-  ->fields('jc')
+-  ->orderBy('jc.id', 'ASC')
+-  ->range($offset, 10)
+-  ->execute()
+-  ->fetchAll();
++    ->fields('jc')
++    ->orderBy('jc.id', 'ASC')
++    ->range($offset, 10)
++    ->execute()
++    ->fetchAll();
+   db_set_active();
+   foreach ($jcomments as $num => $jcomment) {
+     $context['sandbox']['progress']++;
+@@ -514,18 +570,15 @@ function joomla_comment_save(&$context) {
+       $joomla_comment->jcommentid = $jcomment->id;
+       if ($cid) {
+         drupal_write_record('joomla_comments', $joomla_comment, 'cid');
+-      }
+-      else {
++      } else {
+         drupal_write_record('joomla_comments', $joomla_comment);
+       }
+     }
+     if ($cid && $comment->cid) {
+       $context['results']['comments_updated']++;
+-    }
+-    elseif (!$cid && $comment->cid) {
++    } elseif (!$cid && $comment->cid) {
+       $context['results']['comments_new']++;
+-    }
+-    else {
++    } else {
+       $context['results']['comments_failed']++;
+     }
+     // Hook to allow other modules to modify the term
+@@ -538,8 +591,16 @@ function joomla_comment_save(&$context) {
+ /**
+  *
+  */
+-function joomla_batch_finished($success, $results, $operations) {
++function joomla_batch_finished($success, $results, $operations)
++{
+   if ($success) {
++    drupal_set_message(t('Processed @total roles (@new new, @duplicate duplicates, @updated updated, @failed errors)', array(
++      '@total' => $results['groups_total'],
++      '@duplicate' => $results['groups_duplicate'],
++      '@new' => $results['groups_new'],
++      '@updated' => $results['groups_updated'],
++      '@failed' => $results['groups_failed'],
++    )));
+     drupal_set_message(t('Processed @users_total users (@users_new new, @users_duplicate duplicates, @users_updated updated, @users_failed errors)', array(
+       '@users_total' => $results['accounts_total'],
+       '@users_duplicate' => $results['accounts_duplicate'],
+@@ -547,11 +608,10 @@ function joomla_batch_finished($success, $results, $operations) {
+       '@users_updated' => $results['accounts_updated'],
+       '@users_failed' => $results['accounts_failed'],
+     )));
+-    drupal_set_message(t('Processed @total sections (@new new, @updated updated, @failed errors)', array(
+-      '@total' => $results['sections_total'],
+-      '@new' => $results['sections_new'],
+-      '@updated' => $results['sections_updated'],
+-      '@failed' => $results['sections_failed'],
++    drupal_set_message(t('Processed @total user-group maps (@updated updated, @failed errors)', array(
++      '@total' => $results['maps_total'],
++      '@updated' => $results['maps_updated'],
++      '@failed' => $results['maps_failed'],
+     )));
+     drupal_set_message(t('Processed @total categories (@new new, @updated updated, @failed errors)', array(
+       '@total' => $results['categories_total'],
+@@ -571,8 +631,7 @@ function joomla_batch_finished($success, $results, $operations) {
+       '@updated' => $results['comments_updated'],
+       '@failed' => $results['comments_failed'],
+     )));
+-  }
+-  else {
++  } else {
+     $error_operation = reset($operations);
+     $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
+     drupal_set_message($message, 'error');
+diff --git a/joomla.install b/joomla.install
+index cf0faa9..6dbc0e8 100644
+--- a/joomla.install
++++ b/joomla.install
+@@ -11,6 +11,29 @@ function joomla_uninstall() {
+  * Implements hook_schema().
+  */
+ function joomla_schema() {
++  $schema['joomla_roles'] = array(
++    'description' => 'Stores the original Joomla group ID and links to the {role} table',
++    'fields' => array(
++      'rid' => array(
++        'type' => 'int',
++        'unsigned' => TRUE,
++        'not null' => TRUE,
++        'default' => 0,
++        'description' => "The {role}.rid.",
++      ),
++      'jgroupid' => array(
++        'type' => 'int',
++        'unsigned' => TRUE,
++        'not null' => TRUE,
++        'default' => 0,
++        'description' => "The group id from the Joomla database.",
++      ),
++    ),
++    'primary key' => array('rid'),
++    'unique keys' => array(
++      'jgroupid' => array('jgroupid'),
++    ),
++  );
+   $schema['joomla_users'] = array(
+   'description' => 'Stores the original Joomla user ID and password and links to the {users} table',
+     'fields' => array(
+@@ -48,29 +71,6 @@ function joomla_schema() {
+       'juid' => array('juid'),
+     ),
+   );
+-  $schema['joomla_sections'] = array(
+-  'description' => 'Stores the original Joomla section ID and links to the {vocabulary} table',
+-    'fields' => array(
+-      'vid' => array(
+-        'type' => 'int',
+-        'unsigned' => TRUE,
+-        'not null' => TRUE,
+-        'default' => 0,
+-        'description' => "The {vocabulary}.vid.",
+-      ),
+-      'jsectionid' => array(
+-        'type' => 'int',
+-        'unsigned' => TRUE,
+-        'not null' => TRUE,
+-        'default' => 0,
+-        'description' => "The section id from the Joomla database.",
+-      ),
+-    ),
+-    'primary key' => array('vid'),
+-    'unique keys' => array(
+-      'jsectionid' => array('jsectionid'),
+-    ),
+-  );
+   $schema['joomla_categories'] = array(
+   'description' => 'Stores the original Joomla category ID and links to the {term_data} table',
+     'fields' => array(
+@@ -81,13 +81,6 @@ function joomla_schema() {
+         'default' => 0,
+         'description' => "The category id from the Joomla database.",
+       ),
+-      'jsectionid' => array(
+-        'type' => 'int',
+-        'unsigned' => TRUE,
+-        'not null' => TRUE,
+-        'default' => 0,
+-        'description' => "The section id from the Joomla database.",
+-      ),
+       'tid' => array(
+         'type' => 'int',
+         'unsigned' => TRUE,
+diff --git a/joomla.module b/joomla.module
+index ebd4810..5cf0f96 100644
+--- a/joomla.module
++++ b/joomla.module
+@@ -7,6 +7,7 @@
+ define('JOOMLA_IMPORT_CONTENT', TRUE);
+ define('JOOMLA_IMPORT_CATEGORIES', TRUE);
+ define('JOOMLA_IMPORT_USERS', TRUE);
++define('JOOMLA_IMPORT_GROUPS', TRUE);
+ define('JOOMLA_IMPORT_COMMENTS', FALSE);
+ define('JOOMLA_DATABASE_HOST', 'localhost');
+ define('JOOMLA_DATABASE_NAME', 'joomla');
+@@ -21,13 +22,14 @@ define('JOOMLA_IMG_FOLDER', 'images');
+ define('JOOMLA_ENTITY_TYPE', 'node');
+ define('JOOMLA_DEFAULT_STATIC_NODETYPE', 'page');
+ define('JOOMLA_DEFAULT_BLOG_NODETYPE', 'article');
+-define('JOOMLA_SEPERATE_BY_SECTION', 0);
++define('JOOMLA_DEFAULT_CATEGORY_VOCABULARY', 'tags');
+ define('JOOMLA_REAL_NAME_FIELD', FALSE);
+ 
+ /**
+  * Implements hook_help().
+  */
+-function joomla_help($section) {
++function joomla_help($section)
++{
+   switch ($section) {
+     case 'admin/help#joomla':
+       $output = "The joomla module used for migrate Joomla to Drupal.";
+@@ -40,19 +42,21 @@ function joomla_help($section) {
+ /**
+  * Implements hook_permission().
+  */
+-function joomla_permission() {
++function joomla_permission()
++{
+   return array('administer joomla' => array(
+-      'description' => t('Access Joomla Import Settings'),
+-      'title' => t('Administer Joomla'),
+-      'restrict access' => TRUE,
+-    ),
++    'description' => t('Access Joomla Import Settings'),
++    'title' => t('Administer Joomla'),
++    'restrict access' => TRUE,
++  ),
+   );
+ }
+ 
+ /**
+  * Implements hook_node_delete().
+  */
+-function joomla_node_delete($node) {
++function joomla_node_delete($node)
++{
+   db_delete('joomla_content')
+     ->condition('nid', $node->nid)
+     ->execute();
+@@ -61,7 +65,8 @@ function joomla_node_delete($node) {
+ /**
+  * Implements hook_menu().
+  */
+-function joomla_menu() {
++function joomla_menu()
++{
+   $items = array();
+   $items['admin/content/joomla_import'] = array(
+     'title' => 'Import from Joomla',
+@@ -89,7 +94,8 @@ function joomla_menu() {
+ /**
+  * Joomla admin settings.
+  */
+-function joomla_admin_settings($form, &$form_state) {
++function joomla_admin_settings($form, &$form_state)
++{
+   // only administrators can access this function
+   $weight = -20;
+   $bundle = variable_get('joomla_default_static_nodetype', JOOMLA_DEFAULT_STATIC_NODETYPE);
+@@ -190,6 +196,30 @@ function joomla_admin_settings($form, &$form_state) {
+     '#options' => $filter_node_options,
+     '#default_value' => variable_get('joomla_default_blog_nodetype', JOOMLA_DEFAULT_BLOG_NODETYPE),
+   );
++  $filter_category_options = array();
++  foreach (taxonomy_get_vocabularies() as $vocabulary) {
++    $filter_category_options[$vocabulary->vid] = $vocabulary->name;
++  }
++  $form['joomla_settings_content']['joomla_default_category_vocabulary'] = array(
++    '#type' => 'select',
++    '#title' => t('Default vocabulary for categories'),
++    '#required' => TRUE,
++    '#options' => $filter_category_options,
++    '#default_value' => variable_get('joomla_default_category_vocabulary', JOOMLA_DEFAULT_CATEGORY_VOCABULARY),
++  );
++  $node_fields = array();
++  foreach (field_info_instances('node', $bundle) as $field_name => $field) {
++    $node_fields[$field_name] = $field['label'];
++  }
++  foreach (taxonomy_get_vocabularies() as $vocabulary) {
++    $form['joomla_settings_content']['joomla_field_' . $vocabulary->machine_name] = array(
++      '#type' => 'select',
++      '#title' => t('Field to store @name associations', array('@name' => $vocabulary->name)),
++      '#options' => $node_fields,
++      '#empty_value' => FALSE,
++      '#default_value' => variable_get('joomla_field_' . $vocabulary->machine_name, JOOMLA_REAL_NAME_FIELD),
++    );
++  }
+   $lang_options = language_list();
+   $langs['und'] = 'None (undefined)';
+   foreach ($lang_options as $code => $lang) {
+@@ -219,22 +249,6 @@ function joomla_admin_settings($form, &$form_state) {
+     '#default_value' => variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER),
+     '#description' => "A folder to save any images from Joomla contents. This folder related to Drupal 'files' folder, i.e: if you enter '<b>images</b>' then all imported images will be save to Drupal '<b>files/images</b>'."
+   );
+-  if ((bool) db_query_range('SELECT 1 FROM {joomla_categories}', 0, 1)->fetchField()) {
+-    db_set_active('joomla');
+-    foreach (field_info_instances('node', $bundle) as $field_name => $field) {
+-      $node_fields[$field_name] = $field['label'];
+-    }
+-    $vocabularies = taxonomy_vocabulary_load_multiple(FALSE);
+-    foreach ($vocabularies as $vocabulary) {
+-      $form['joomla_settings_content']['joomla_field_' . $vocabulary->machine_name] = array(
+-        '#type' => 'select',
+-        '#title' => t('Field to store @name associations', array('@name' => $vocabulary->name)),
+-        '#options' => $node_fields,
+-        '#empty_value' => FALSE,
+-        '#default_value' => variable_get('joomla_field_' . $vocabulary->machine_name, JOOMLA_REAL_NAME_FIELD),
+-      );
+-    }
+-  }
+   $weight++;
+   $form['joomla_settings_user'] = array(
+     '#type' => 'fieldset',
+@@ -260,7 +274,8 @@ function joomla_admin_settings($form, &$form_state) {
+ /**
+  * Import form.
+  */
+-function joomla_import_form($form, &$form_state) {
++function joomla_import_form($form, &$form_state)
++{
+   if (!joomla_database_test()) {
+     $form['error'] = array(
+       '#markup' => '<p>' . t('The joomla database settings are not currently valid. Please set the correct database settings at <a href="@url">Joomla to Drupal settings</a> page', array('@url' => url('admin/config/content/joomla'))) . '</p>',
+@@ -278,7 +293,8 @@ function joomla_import_form($form, &$form_state) {
+ /**
+  * These checkboxes are used on both the admin and import forms.
+  */
+-function joomla_import_form_checkboxes(&$form_state = NULL) {
++function joomla_import_form_checkboxes(&$form_state = NULL)
++{
+   $form['joomla_import'] = array(
+     '#type' => 'fieldset',
+     '#title' => t('Items to import'),
+@@ -295,6 +311,11 @@ function joomla_import_form_checkboxes(&$form_state = NULL) {
+     '#title' => t('Import categories'),
+     '#default_value' => variable_get('joomla_import_categories', JOOMLA_IMPORT_CATEGORIES),
+   );
++  $form['joomla_import']['joomla_import_groups'] = array(
++    '#type' => 'checkbox',
++    '#title' => t('Import groups'),
++    '#default_value' => variable_get('joomla_import_groups', JOOMLA_IMPORT_GROUPS),
++  );
+   $form['joomla_import']['joomla_import_users'] = array(
+     '#type' => 'checkbox',
+     '#title' => t('Import users'),
+@@ -318,10 +339,12 @@ function joomla_import_form_checkboxes(&$form_state = NULL) {
+ /**
+  * Submit import form.
+  */
+-function joomla_import_form_submit($form, &$form_state) {
+-  $joomla_update_duplicate = (bool) $form_state['values']['joomla_update_duplicate'];
++function joomla_import_form_submit($form, &$form_state)
++{
++  $joomla_update_duplicate = (bool)$form_state['values']['joomla_update_duplicate'];
+   $jos = array();
+   $jos['users'] = (bool) $form_state['values']['joomla_import_users'];
++  $jos['groups'] = (bool) $form_state['values']['joomla_import_groups'];
+   $jos['comments'] = (bool) $form_state['values']['joomla_import_comments'];
+   $jos['categories'] = (bool) $form_state['values']['joomla_import_categories'];
+   $jos['content'] = (bool) $form_state['values']['joomla_import_content'];
+@@ -340,15 +363,16 @@ function joomla_import_form_submit($form, &$form_state) {
+ /**
+  *
+  */
+-function joomla_replace_mos_image($images_source, $text_source) {
+-  $joomla_img_folder       = variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER);
+-  $joomla_path             = variable_get('joomla_path', JOOMLA_PATH);
++function joomla_replace_mos_image($images_source, $text_source)
++{
++  $joomla_img_folder = variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER);
++  $joomla_path = variable_get('joomla_path', JOOMLA_PATH);
+   $images = array();
+   $images = explode("\n", $images_source);
+   $image_string = '{mosimage}';
+-  $n=0;
+-  $images_items =array();
+-  while (!(strpos($text_source, $image_string) === FALSE))  {
++  $n = 0;
++  $images_items = array();
++  while (!(strpos($text_source, $image_string) === FALSE)) {
+     $images_items = explode("|", $images[$n]);
+     if (!file_exists('public://' . $joomla_img_folder)) {
+       mkdir('public://' . $joomla_img_folder);
+@@ -360,8 +384,8 @@ function joomla_replace_mos_image($images_source, $text_source) {
+     }
+     copy($joomla_path . '/images/stories/' . $images_items[0], "public://$joomla_img_folder/" . $images_items[0]);
+     $images_replace = '<img src="' . base_path() . variable_get('file_public_path', conf_path() . '/files') . "/$joomla_img_folder/{$images_items[0]}" . '"'
+-                 . ' align="' . $images_items[1] . '" title="' . $images_items[2] . '" alt="' . $images_items[2] . '"/>';
+-    $text_source = substr_replace($text_source, $images_replace, strpos($text_source, $image_string), 10) ;
++      . ' align="' . $images_items[1] . '" title="' . $images_items[2] . '" alt="' . $images_items[2] . '"/>';
++    $text_source = substr_replace($text_source, $images_replace, strpos($text_source, $image_string), 10);
+     $n++;
+   }
+   return $text_source;
+@@ -370,7 +394,8 @@ function joomla_replace_mos_image($images_source, $text_source) {
+ /**
+  *
+  */
+-function joomla_replace_image_link($text_source) {
++function joomla_replace_image_link($text_source)
++{
+   //Fixs image string: src="images/
+   $image_string = 'src="images/';
+   $images_replace = 'src="' . base_path() . variable_get('file_public_path', conf_path() . '/files/') . variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER) . '/';
+@@ -381,7 +406,8 @@ function joomla_replace_image_link($text_source) {
+ /**
+  * Implements hook_form_alter().
+  */
+-function joomla_form_alter(&$form, &$form_state, $form_id) {
++function joomla_form_alter(&$form, &$form_state, $form_id)
++{
+   if ($form_id == 'user_login' || $form_id == 'user_login_block') {
+     if (isset($form_state['input']['name'])) {
+       $last_validator = array_pop($form['#validate']);
+@@ -394,14 +420,16 @@ function joomla_form_alter(&$form, &$form_state, $form_id) {
+ /**
+  *
+  */
+-function joomla_login_validate($form, &$form_state) {
++function joomla_login_validate($form, &$form_state)
++{
+   joomla_authenticate($form_state['values'], $form_state['uid']);
+ }
+ 
+ /**
+  *
+  */
+-function joomla_authenticate($form_values = array(), &$form_uid) {
++function joomla_authenticate($form_values = array(), &$form_uid)
++{
+   global $user;
+   if (!empty($user->uid) || $form_uid) {
+     // User has already sucessfully authenticated
+@@ -428,10 +456,9 @@ function joomla_authenticate($form_values = array(), &$form_uid) {
+    */
+   if (strpos($joomla_user->password, ':')) {
+     list($password, $salt) = explode(':', $joomla_user->password, 2);
+-  }
+-  else {
++  } else {
+     $password = $joomla_user->password;
+-    $salt='';
++    $salt = '';
+   }
+   // Check the supplied password against the md5sum
+   if (md5($form_values['pass'] . $salt) == $password || (!$salt && md5($form_values['pass']) == $password)) {
+@@ -441,7 +468,7 @@ function joomla_authenticate($form_values = array(), &$form_uid) {
+     user_save($user, array('pass' => $form_values['pass']));
+     $joomla_user->converted = 1;
+     drupal_write_record('joomla_users', $joomla_user, array('uid'));
+-    $form_uid=$user->uid;
++    $form_uid = $user->uid;
+     user_login_finalize($form_values);
+     return $user;
+   }
+@@ -452,7 +479,8 @@ function joomla_authenticate($form_values = array(), &$form_uid) {
+  * makes it possible to switch between the Drupal and Joomla databases with
+  * db_set_active().
+  */
+-function joomla_database_init() {
++function joomla_database_init()
++{
+   $joomla_db = Database::getConnectionInfo('joomla');
+   if (empty($joomla_db)) {
+     /**
+@@ -479,7 +507,8 @@ function joomla_database_init() {
+ /**
+  * Test whether a valid joomla database has been configured.
+  */
+-function joomla_database_test() {
++function joomla_database_test()
++{
+   $connection = @mysql_connect(variable_get('joomla_database_host', JOOMLA_DATABASE_HOST) . ':' . variable_get('joomla_database_port', JOOMLA_DATABASE_PORT), variable_get('joomla_database_user', JOOMLA_DATABASE_USER), variable_get('joomla_database_pass', JOOMLA_DATABASE_PASS), TRUE, 2);
+   if (!$connection) {
+     return FALSE;
+

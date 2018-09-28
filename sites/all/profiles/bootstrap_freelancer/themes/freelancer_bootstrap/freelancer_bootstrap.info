@@ -1,0 +1,27 @@
+name = Freelancer Bootstrap
+description = Freelancer Bootstrap one page theme.
+core = 7.x
+
+stylesheets[all][] = css/bootstrap.min.css
+stylesheets[all][] = css/freelancer.css
+stylesheets[all][] = font-awesome-4.1.0/css/font-awesome.min.css
+
+scripts[] = js/bootstrap.min.js
+scripts[] = js/jquery.easing.js
+scripts[] = js/classie.js
+scripts[] = js/cbpAnimatedHeader.js
+scripts[] = js/jqBootstrapValidation.js
+scripts[] = js/freelancer.js
+
+regions[navigation] = Navigation
+regions[header]     = Header
+regions[help]       = Help
+regions[content]    = Content
+regions[footer]     = Footer
+
+; Information added by Drupal.org packaging script on 2015-03-03
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "bootstrap_freelancer"
+datestamp = "1425410576"
+

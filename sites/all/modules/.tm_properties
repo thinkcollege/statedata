@@ -1,0 +1,15 @@
+TM_GIT = "/usr/bin/git"
+# show the path to the current tab's file in the window title 
+# (replace the 2 instances of 'username' in the string below 
+# with your mac username).
+projectDirectory = "$CWD"
+windowTitle    = "$TM_DISPLAYNAME${TM_DIRECTORY/\A(?:\/Volumes\/ICI_Intranet\w+\/?(.*)|(.+))\z/${2:? – ${2/\A\/Users\/ici/~/}:${1/\A(?=.)/ – /}}/}"
+
+fontName       = "Monaco" 
+fontSize       = 13
+tabSize        = 2
+softTabs       = true
+wrapColumn     = 80 | "Use Window Frame" # choose one
+sofWrap        = false
+showInvisibles = true
+smartTypingPairs = ( )

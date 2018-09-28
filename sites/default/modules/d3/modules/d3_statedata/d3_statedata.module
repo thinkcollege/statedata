@@ -1,0 +1,1941 @@
+<?php
+/**
+ * @file
+ * Chart builder for the Statedata.info website.
+ */
+
+/**
+ * @defgroup d3_statedata
+ * @ingroup examples
+ * @{
+ *
+*  The Node Form Alter example needs to be in another file.
+* module_load_include('inc', 'd3_statedata', 'd3_statedata_node_form_alter');
+
+/**
+ * Implements hook_menu().
+ *
+ * Sets up calls to drupal_get_form() for all our example cases.
+ *
+ * @see menu_example.module
+ * @see menu_example_menu()
+ */
+include('/usr/lib/php/drupal/7.x_sites/statedata.info/modules/d3/modules/d3_statepages/old_system/functions.php');
+function d3_statedata_menu() {
+  $items = array();
+
+
+
+
+  //Chart builder step one
+  $items['data'] = array(
+    'title' => 'Build a chart',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('d3_statedata_dependent_dropdown'),
+    'access callback' => TRUE,
+    'weight' => 4,
+  );
+  // Show chart and form for rebuilding
+  $items['data/showchart/%'] = array(
+    'title' => t('Chart'),
+    'page callback' => 'd3_statedata_chart' ,
+     'page arguments' =>  array(2),
+     'access callback' => TRUE,
+    'weight' => 5,
+  );
+
+ //Download chart as CSV
+  $items['data/dlchart/%'] = array(
+    'title' => t('Download CSV'),
+    'page callback' => 'd3_statedata_csvOut' ,
+     'page arguments' =>  array(2),
+     'access callback' => TRUE,
+    'weight' => 6,
+  );
+  $items['data/appendix/%'] = array(
+  'title' => t('Chart'),
+  'page callback' => 'd3_appendix_chart' ,
+   'page arguments' =>  array(2),
+   'access callback' => TRUE,
+  'weight' => 7,
+);
+// Show chart and form for rebuilding
+  $items['data/appendix/%/%'] = array(
+    'title' => t('Chart'),
+    'page callback' => 'd3_appendix_chart' ,
+     'page arguments' =>  array(2,3),
+     'access callback' => TRUE,
+    'weight' => 5,
+  );
+
+  return $items;
+}
+
+
+
+
+
+
+/**
+ * A form with a dropdown whose options are dependent on a
+ * choice made in a previous dropdown.
+ *
+ * On changing the first dropdown, the options in the second
+ * are updated.
+ */
+function d3_statedata_dependent_dropdown($form, &$form_state) {
+ $form_state['calledback'] = FALSE;
+ $urlparams = current_path();
+ $sessno = '';
+ $sessno = strpos($urlparams,'showchart') !== false ? substr($urlparams, -6) : '';
+
+$sessionkey = $sessno != '' ? (isset($_SESSION["vars" . $sessno]) ? $_SESSION["vars" . $sessno] :_d3_statedata_unserialize_stored($sessno) ) : '';
+ if(isset($form_state['storage']['dropdown_first']) && isset($form_state['storage']['radio_cols']))
+  {
+   $chartdata = array('agency' => $form_state['storage']['dropdown_first'],'statechoice' => $form_state['storage']['dropdown_states'], 'category' => (isset($form_state['values']['category_sel']) ? $form_state['values']['category_sel'] : ''), 'variables' => $form_state['values']['radio_cols']) ;
+
+  }
+
+  // Get the list of options to populate the first dropdown.
+  $options_first = _d3_statedata_get_first_dropdown_options();
+
+  // If we have a value for the first dropdown from $form_state['values'] we use
+  // this both as the default value for the first dropdown and also as a
+  // parameter to pass to the function that retrieves the options for the
+  // second dropdown.
+  $selected = $sessionkey != '' ? $sessionkey['agency'] : (isset($form_state['values']['dropdown_first']) ? $form_state['values']['dropdown_first'] : key($options_first));
+$options_states = _d3_statedata_get_states_dropdown_options($selected);
+
+  $form['#attached']['css'] = array(
+    drupal_get_path('module', 'd3_statedata') . '/d3_statedata.css',
+  );
+
+  $form['#attached']['js'] = array(
+    drupal_get_path('module', 'd3_statedata') . '/d3_statedata.js',
+  );
+
+
+  $form['dropdown_first'] = array(
+ '#prefix' => '<a class="resetBut first" href="/data">Reset the form</a></div>',
+    '#type' => 'select',
+    '#title' => 'Select Data Source',
+    '#options' => $options_first,
+    '#default_value' => (isset($form_state['storage']['dropdown_first']) ? $form_state['storage']['dropdown_first'] : $selected),
+    // Bind an ajax callback to the change event (which is the default for the
+    // select form type) of the first dropdown. It will replace the second
+    // dropdown when rebuilt
+    '#ajax' => array(
+      // When 'event' occurs, Drupal will perform an ajax request in the
+      // background. Usually the default value is sufficient (eg. change for
+      // select elements), but valid values include any jQuery event,
+      // most notably 'mousedown', 'blur', and 'submit'.
+
+         'effect' => 'fade',
+       'event' => 'change',
+      'callback' => 'd3_statedata_dependent_dropdown_callback',
+      'wrapper' => 'dropdown-states-replace',
+      'progress' => array('type' => 'bar', 'message' => t('Please wait...')),
+
+    ),
+  );
+
+  $form['continue_to_second'] = array(
+    '#type' => 'submit',
+    '#value' => t('Choose'),
+    '#attributes' => array('class' => array('next-button')),
+  );
+
+  $form['dropdown_states'] = array(
+    '#type' => 'select',
+    '#title' => "Select a state",
+    // The entire enclosing div created here gets replaced when dropdown_first
+    // is changed.
+   '#prefix' =>  ($form_state['rebuild'] == 1 && $form_state['no_js'] == 1 ?  '<div id="dropdown-states-replace-show">' :'<div id="dropdown-states-replace" class="ajax-disabling">'),
+
+    // when the form is rebuilt during ajax processing, the $selected variable
+    // will now have the new value and so the options will change
+    '#options' => _d3_statedata_get_states_dropdown_options($selected),
+    '#default_value' => $sessionkey != '' ? $sessionkey['statechoice'] :
+    ( isset($form_state['storage']['dropdown_states']) ? $form_state['storage']['dropdown_states'] : (isset($form_state['values']['dropdown_states']) ? $form_state['values']['dropdown_states'] : '')),
+  );
+
+  $form['add_states'] = array(
+    '#type' => 'select',
+    '#multiple' => TRUE,
+    '#title' => "Select additional states for comparison",
+     '#description' => t('Optional. You may select as many states as you want, but the chart may get too crowded to read. However, the table under the chart will still be useful.'),
+    // The entire enclosing div created here gets replaced when dropdown_first
+    // is changed.
+
+
+    // when the form is rebuilt during ajax processing, the $selected variable
+    // will now have the new value and so the options will change
+    '#options' => _d3_statedata_get_states_multiselect_options($selected),
+    '#default_value' => $sessionkey != '' ? $sessionkey['addstates'] :
+   (isset($form_state['values']['addstates']) ? $form_state['values']['addstates'] : NULL),
+    '#size' => 10,
+  );
+
+
+if ($selected == "ACS" || $selected == "ACS09" || $selected == "VR")  {
+ $form['category_sel'] = array(
+   '#type' => 'select',
+   '#title' => "Select a category",
+
+
+
+   // when the form is rebuilt during ajax processing, the $selected variable
+   // will now have the new value and so the options will change
+   '#options' => _d3_statedata_get_category_dropdown_options($selected),
+   '#default_value' => $form_state['calledback'] ? NULL : ($sessionkey != '' ? $sessionkey['category'] : NULL),
+ );
+ $form['radio_cols'] = array(
+   '#type' => 'radios',
+   '#title' => "Select a variable",
+
+ '#required' => TRUE,
+
+   // when the form is rebuilt during ajax processing, the $selected variable
+   // will now have the new value and so the options will change
+   '#options' => _d3_statedata_get_radio_cols_options($selected),
+   '#default_value' => $form_state['calledback'] ? NULL : ($sessionkey != '' ? $sessionkey['variables'] : NULL),
+ );
+   $descriptions = _d3_statedata_get_radio_cols_descriptions($selected);
+   foreach ($descriptions as $description) {
+   $fieldname = $description['Field'];
+	$shortname = $description['short_name'];
+   $desc_text = $description['desc'];
+   $form["radio_cols"]["$fieldname"]["#description"] = $desc_text;
+				}
+				} else {
+
+            $form['radio_cols'] = array(
+              '#type' => 'radios',
+              '#title' => "Select a variable",
+
+  '#required' => TRUE,
+
+              // when the form is rebuilt during ajax processing, the $selected variable
+              // will now have the new value and so the options will change
+              '#options' => _d3_statedata_get_radio_cols_options($selected),
+              '#default_value' => $form_state['calledback'] ? NULL : ($sessionkey != '' ? $sessionkey['variables'] : NULL),
+            );
+
+            $descriptions = _d3_statedata_get_radio_cols_descriptions($selected);
+            foreach ($descriptions as $description) {
+            $fieldname = $description['Field'];
+				$shortname = $description['short_name'];
+            $desc_text = $description['desc'];
+            $form["radio_cols"]["$fieldname"]["#description"] = $desc_text;
+
+            }
+
+            }
+
+
+
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+    '#suffix' => '<a class="resetBut" href="/data">Reset the form</a></div>',
+  );
+
+
+
+
+  return $form;
+}
+
+function d3_statedata_dependent_dropdown_submit($form, &$form_state) {
+
+  // Now handle the case of the next, previous, and submit buttons.
+  // only submit will result in actual submission, all others rebuild.
+  switch ($form_state['triggering_element']['#value']) {
+    case t('Submit'):
+    $randomno = rand(100000, 999999);
+     $sessstring = "vars$randomno";
+
+  $myvar = array();
+  $formrebuild  = array();
+$description = array();
+   $myvar['agency'] = $_SESSION["$sessstring"]['agency'] =  $form_state['storage']['dropdown_first'] = $form_state['values']['dropdown_first'];
+     $myvar['category'] = $_SESSION["$sessstring"]['category'] =  $form_state['storage']['category_sel'] = (isset($form_state['values']['category_sel']) ? $form_state['values']['category_sel'] : '');
+ $statevar = $myvar['statechoice'] =  $_SESSION["$sessstring"]['statechoice'] = $form_state['storage']['dropdown_states'] = $form_state['values']['dropdown_states'] ? $form_state['values']['dropdown_states'] : '';
+ $addstatevar = $myvar['addstates'] =  $_SESSION["$sessstring"]['addstates'] = $form_state['storage']['add_states'] = $form_state['values']['add_states'] ?  $form_state['values']['add_states'] : NULL;
+        $descripvar = $myvar['variables'] =   $_SESSION["$sessstring"]['variables'] = $form_state['storage']['radio_cols'] = $form_state['values']['radio_cols'] ? $form_state['values']['radio_cols'] : '';
+      $stringstates = '';
+      if ($addstatevar) { foreach($addstatevar as $key => $val) { $stringstates .=
+      ", " . $form_state['complete form']["add_states"]["#options"]["$val"]; } }
+        $description = $form_state['complete form']["dropdown_states"]["#options"]["$statevar"]   . $stringstates . ": " . $form_state['complete form']["radio_cols"]["#options"]["$descripvar"];
+      $formrebuild['form'] =     $_SESSION["$sessstring"]['form'] = $form;
+       $formrebuild['form_state'] =     $_SESSION["$sessstring"]['form_state'] = $form_state;
+ $form_state['no_js'] = FALSE;
+     $islogged = user_is_logged_in() ? '1' : '0';
+     $time = time();
+   $serialized = serialize($myvar);
+  // $serialform = serialize($formrebuild);
+   $userip = ip_address();
+
+  $fields = array(
+        'urlid' => $randomno,
+        'create_time' => $time,
+        'formvars' => "$serialized",
+        // 'serialform' => "$serialform",
+        'is_logged' => $islogged,
+        'ip_address' => $userip,
+        'search_descrip' => $description,
+      );
+
+      db_insert('d3_url_store')->fields($fields)->execute();
+      $form_state['redirect'] = "data/showchart/$randomno";
+      return;
+  }
+
+ // 'Choose' or anything else will cause rebuild of the form and present
+ // it again.
+ $form_state['no_js'] = TRUE;
+   $form_state['rebuild'] = TRUE;
+}
+
+
+
+/**
+ * Selects just the second dropdown to be returned for re-rendering
+ *
+ * Since the controlling logic for populating the form is in the form builder
+ * function, all we do here is select the element and return it to be updated.
+ *
+ * @return renderable array (the second dropdown)
+ */
+function d3_statedata_dependent_dropdown_callback($form, $form_state) {
+  $form_state['calledback'] = TRUE;
+  return  $form_state['values']['dropdown_first'] != "ACS" && $form_state['values']['dropdown_first'] != "ACS09" && $form_state['values']['dropdown_first'] != "VR" ? array($form['dropdown_states'],$form['add_states'],$form['radio_cols'],$form['submit']) : array(array($form['dropdown_states'],$form['add_states'],$form['category_sel'],$form['radio_cols'],$form['submit']),array($form_state['calledback']) ) ;
+
+}
+
+/**
+ * Helper function to populate the first dropdown. This would normally be
+ * pulling data from the database.
+ *
+ * @return array of options
+ */
+function _d3_statedata_get_first_dropdown_options() {
+$oldfunctions = new oldFunctions;
+$optionrows = $oldfunctions->get_agency_tables();
+$options = array();
+
+
+
+    foreach ($optionrows as $result) {
+        $options[$result['Name']] =
+            $result['Comment'];
+}
+
+  return $options;
+}
+
+function _d3_statedata_get_states_dropdown_options($agency) {
+$oldfunctions = new oldFunctions;
+$optionrows = $oldfunctions->getStatesFiltered("state", $agency);
+
+   $options = array();
+
+
+
+       foreach ($optionrows as $result) {
+           $options[$result['abbreviation']] =
+               $result['name'];
+   }
+
+  return $options;
+}
+
+function _d3_statedata_get_states_multiselect_options($agency) {
+$oldfunctions = new oldFunctions;
+$optionrows = $oldfunctions->getStatesFiltered("state", $agency);
+
+   $options = array();
+
+
+
+       foreach ($optionrows as $result) {
+           $options[$result['abbreviation']] =
+               $result['name'];
+   }
+
+  return $options;
+}
+function _d3_statedata_get_radio_cols_options($agency) {
+$oldfunctions = new oldFunctions;
+$optionrows =  $agency != "ACS" && $agency !=  "ACS09" && $agency !=  "VR" ? $oldfunctions->get_table_columns_as_radio($agency, 2) :
+($agency !=  "VR" ? $oldfunctions->get_acs_table_columns_as_checkboxes($agency,2) : $oldfunctions->get_vr_table_columns_as_checkboxes($agency,2));
+
+   $options = array();
+
+
+
+        foreach ($optionrows as $result) {
+            $options[$result['Field']] =
+                $result['short_name'];
+
+    }
+// print_r($options);
+  return $options;
+}
+
+function _d3_statedata_get_radio_cols_descriptions($agency) {
+$oldfunctions = new oldFunctions;
+$optionrows =  $agency != "ACS" && $agency !=  "ACS09" && $agency !=  "VR" ? $oldfunctions->get_table_columns_as_radio($agency, 2) :
+($agency !=  "VR" ? $oldfunctions->get_acs_table_columns_as_checkboxes($agency,2) : $oldfunctions->get_vr_table_columns_as_checkboxes($agency,2));
+   $options = array();
+
+
+
+        foreach ($optionrows as $result) {
+            $option['Field'] = $result['Field'];
+                $option['short_name'] = $result['short_name'];
+                $option['desc'] = $result['desc'];
+                $options[] = $option;
+    }
+
+  return $options;
+}
+
+function _d3_statedata_get_category_dropdown_options($agency) {
+$oldfunctions = new oldFunctions;
+$optionrows =  ($agency == "VR" ? $oldfunctions->get_vr_tables($agency) : $oldfunctions->get_acs_tables($agency));
+
+   $options = array();
+
+
+
+       foreach ($optionrows as $result) {
+           $options[$result['Name']] =
+               $result['Comment'];
+   }
+
+  return $options;
+}
+
+
+function _d3_statedata_unserialize_stored($firstparameter = '') {
+  $firstquery = db_query('select urlid,formvars from {d3_url_store} urlstore where urlid = :urlparam', array(':urlparam' => "$firstparameter"))->fetchAll(PDO::FETCH_ASSOC);
+ $options = array();
+
+
+  $variablearray = unserialize($firstquery[0]['formvars']);
+  //$formarray = unserialize($firstquery[0]['serialform']);
+//  array_unshift( $variablearray,$formarray);
+
+  return !empty($firstquery[0]['urlid']) ? $variablearray : FALSE;
+}
+
+function _d3_statedata_recent_searches($firstparameter='') {
+$recentblock = '';
+$userip = ip_address();
+$oneweek = time() - 604800;
+$querytext = "select urlid,search_descrip,ip_address from {d3_url_store} urlstore where ip_address = '$userip' AND urlid != $firstparameter AND create_time > $oneweek  ORDER BY create_time DESC LIMIT 12";
+
+  $firstquery = db_query($querytext)->fetchAll(PDO::FETCH_ASSOC);
+  $rowcounter = db_query($querytext)->rowCount();
+  if ($rowcounter < 1) { return $recentblock;}
+
+  $recentblock = '<h3 id="slideBloc">Click to view your recent searches</h3><div class="recSearch" id="searchBloc"><ul class="recentblock">';
+
+for ($i =0; $i < $rowcounter; $i++) {
+$recentblock .= '<li><a href="/data/showchart/' . $firstquery[$i]['urlid'] . '">' . $firstquery[$i]['search_descrip'] . '</a></li>';
+}
+$recentblock .= "</ul></div>";
+return $recentblock;
+}
+
+function _d3_statedata_recent_nonuser() {
+$frontblock = '';
+$userip = ip_address();
+$querytext = "select urls.ip_address,urlfields.urlid,urlfields.search_descrip from {d3_url_store} as urls LEFT JOIN (select ip_address,urlid,search_descrip from {d3_url_store} order by create_time DESC) as urlfields ON urls.ip_address = urlfields.ip_address WHERE urls.ip_address != '$userip' GROUP BY urls.ip_address ORDER BY create_time DESC LIMIT 12";
+
+  $firstquery = db_query($querytext)->fetchAll(PDO::FETCH_ASSOC);
+  $rowcounter = db_query($querytext)->rowCount();
+  if ($rowcounter < 1) { return $frontblock;}
+
+  $frontblock = '<ul class="frontblock">';
+
+for ($i =0; $i < $rowcounter; $i++) {
+$frontblock .= '<li><a href="/data/showchart/' . $firstquery[$i]['urlid'] . '">' . $firstquery[$i]['search_descrip'] . '</a></li>';
+}
+$frontblock .= "</ul>";
+return $frontblock;
+}
+//  Appendix functions
+
+function d3_statedata_block_info() {
+  $blocks = array();
+  $blocks['state_appendix'] = array(
+    'info' => t('Appendix form'),
+    'status' => TRUE,
+  );
+
+  return $blocks;
+}
+
+function d3_statedata_block_view($delta = '') {
+  // The $delta parameter tells us which block is being requested.
+  $block = array();
+
+      $block['subject'] = t('State Appendix');
+      $block['content'] = drupal_get_form('d3_statedata_dependent_appendix');
+
+
+  return $block;
+}
+
+function d3_statedata_dependent_appendix($form, &$form_state) {
+ $form_state['calledback'] = FALSE;
+ $urlparams = current_path();
+ $sessno = '';
+ $sessno = strpos($urlparams,'appendix') !== false ? substr($urlparams, -6) : '';
+
+$sessionkey = $sessno != '' ? (isset($_SESSION["vars" . $sessno]) ? $_SESSION["vars" . $sessno] :_d3_statedata_unserialize_stored($sessno) ) : '';
+ if(isset($form_state['storage']['dropdown_first']) && isset($form_state['storage']['radio_cols']))
+  {
+   $chartdata = array('agency' => $form_state['storage']['dropdown_first'],'statechoice' => $form_state['storage']['dropdown_states'],'appchoice' => $form_state['storage']['appendix_sel'], 'category' => (isset($form_state['values']['category_sel']) ? $form_state['values']['category_sel'] : ''), 'variables' => $form_state['values']['radio_cols']) ;
+
+  }
+
+  // Get the list of options to populate the first dropdown.
+  $options_first = _d3_statedata_get_first_dropdown_options();
+
+  // If we have a value for the first dropdown from $form_state['values'] we use
+  // this both as the default value for the first dropdown and also as a
+  // parameter to pass to the function that retrieves the options for the
+  // second dropdown.
+  $selected = $sessionkey != '' ? $sessionkey['agency'] : (isset($form_state['values']['dropdown_first']) ? $form_state['values']['dropdown_first'] : key($options_first));
+$options_states = _d3_statedata_get_states_dropdown_options($selected);
+
+  $form['#attached']['css'] = array(
+    drupal_get_path('module', 'd3_statedata') . '/d3_statedata.css',
+  );
+
+  $form['#attached']['js'] = array(
+    drupal_get_path('module', 'd3_statedata') . '/d3_statedata.js',
+  );
+
+
+
+  $form['dropdown_states'] = array(
+    '#type' => 'select',
+    '#title' => "Select a state",
+    // The entire enclosing div created here gets replaced when dropdown_first
+    // is changed.
+   '#prefix' =>  ($form_state['rebuild'] == 1 && $form_state['no_js'] == 1 ?  '<div id="dropdown-states-replace-show">' :'<div id="dropdown-states-replace" class="ajax-disabling">'),
+    // when the form is rebuilt during ajax processing, the $selected variable
+    // will now have the new value and so the options will change
+    '#options' => _d3_statedata_get_states_dropdown_options($selected),
+    '#default_value' => (arg(2) ? arg(2) : 'US'
+  ),
+  );
+$form['appendix_sel'] = array(
+  '#type' => 'select',
+  '#multiple' => FALSE,
+  '#title' => "Select your state appendix",
+  '#options' => array('app1' => 'Appendix 1: Population Statistics','app2' => 'Appendix 2: Social Security disability Benefit Recipient Statistics','app3' => 'Appendix 3: Senior and Disabilities Services','app4' => 'Appendix 4: Senior and Disabilities Services part 2','app5' => 'Appendix 5 Rehabilitation Services','app6' => 'Appendix 6: Rehabilitation Services part 2'),
+   '#description' => t('Optional. You may select as many states as you want, but the chart may get too crowded to read. However, the table under the chart will still be useful.'),
+   '#default_value' => (arg(3) ? arg(3) : 'app1'),
+ );
+
+
+
+$a = $_GET['q'];
+
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+    '#suffix' => (strpos($a, 'appendix') !== false ? '' : '</div>'),
+  );
+
+
+  return $form;
+}
+
+function d3_statedata_dependent_appendix_submit($form, &$form_state) {
+
+  // Now handle the case of the next, previous, and submit buttons.
+  // only submit will result in actual submission, all others rebuild.
+  switch ($form_state['triggering_element']['#value']) {
+    case t('Submit'):
+    $randomno = rand(100000, 999999);
+     $sessstring = "vars$randomno";
+
+  $myvar = array();
+  $formrebuild  = array();
+$description = array();
+   $myvar['agency'] = $_SESSION["$sessstring"]['agency'] =  $form_state['storage']['dropdown_first'] = $form_state['values']['dropdown_first'];
+     $myvar['category'] = $_SESSION["$sessstring"]['category'] =  $form_state['storage']['category_sel'] = (isset($form_state['values']['category_sel']) ? $form_state['values']['category_sel'] : '');
+ $statevar = $myvar['statechoice'] =  $_SESSION["$sessstring"]['statechoice'] = $form_state['storage']['dropdown_states'] = $form_state['values']['dropdown_states'] ? $form_state['values']['dropdown_states'] : '';
+ $appendixvar = $myvar['appchoice'] =  $_SESSION["$sessstring"]['appchoice'] = $form_state['storage']['appendix_sel'] = $form_state['values']['appendix_sel'] ? $form_state['values']['appendix_sel'] : '';
+ $addstatevar = $myvar['addstates'] =  $_SESSION["$sessstring"]['addstates'] = $form_state['storage']['add_states'] = $form_state['values']['add_states'] ?  $form_state['values']['add_states'] : NULL;
+        $descripvar = $myvar['variables'] =   $_SESSION["$sessstring"]['variables'] = $form_state['storage']['radio_cols'] = $form_state['values']['radio_cols'] ? $form_state['values']['radio_cols'] : '';
+      $stringstates = '';
+      if ($addstatevar) { foreach($addstatevar as $key => $val) { $stringstates .=
+      ", " . $form_state['complete form']["add_states"]["#options"]["$val"]; } }
+        $description = $form_state['complete form']["dropdown_states"]["#options"]["$statevar"]   . $stringstates . ": " . $form_state['complete form']["radio_cols"]["#options"]["$descripvar"];
+      $formrebuild['form'] =     $_SESSION["$sessstring"]['form'] = $form;
+       $formrebuild['form_state'] =     $_SESSION["$sessstring"]['form_state'] = $form_state;
+ $form_state['no_js'] = FALSE;
+     $islogged = user_is_logged_in() ? '1' : '0';
+     $time = time();
+   $serialized = serialize($myvar);
+  // $serialform = serialize($formrebuild);
+   $userip = ip_address();
+
+  $fields = array(
+        'urlid' => $randomno,
+        'create_time' => $time,
+        'formvars' => "$serialized",
+        // 'serialform' => "$serialform",
+        'is_logged' => $islogged,
+        'ip_address' => $userip,
+        'search_descrip' => $description,
+      );
+
+      db_insert('d3_url_store')->fields($fields)->execute();
+      $firstparameter = $form_state['values']['dropdown_states'] ? $form_state['values']['dropdown_states'] : '';
+      $secondparameter =  $form_state['values']['appendix_sel'] ? $form_state['values']['appendix_sel'] : '';
+      $appendixvar = $myvar['appchoice'] =  $_SESSION["$sessstring"]['appchoice'] = $form_state['storage']['appendix_sel'] = $form_state['values']['appendix_sel'];
+      $form_state['redirect'] = "data/appendix/$firstparameter/$secondparameter";
+      return;
+  }
+
+ // 'Choose' or anything else will cause rebuild of the form and present
+ // it again.
+ $form_state['no_js'] = TRUE;
+   $form_state['rebuild'] = TRUE;
+}
+
+
+
+/**
+ * Selects just the second dropdown to be returned for re-rendering
+ *
+ * Since the controlling logic for populating the form is in the form builder
+ * function, all we do here is select the element and return it to be updated.
+ *
+ * @return renderable array (the second dropdown)
+ */
+ function d3_statedata_dependent_appendix_callback($form, $form_state) {
+   $form_state['calledback'] = TRUE;
+   return  $form_state['values']['dropdown_first'] != "ACS" && $form_state['values']['dropdown_first'] != "ACS09" && $form_state['values']['dropdown_first'] != "VR" ? array($form['dropdown_states'],$form['add_states'],$form['radio_cols'],$form['submit']) : array(array($form['dropdown_states'],$form['add_states'],$form['category_sel'],$form['radio_cols'],$form['submit']),array($form_state['calledback']) ) ;
+
+ }
+
+
+
+ function d3_appendix_chart($firstparameter = '',$secondparameter = '') {
+ $stored =   isset($_SESSION["vars" . $firstparameter]) ? $_SESSION["vars" . $firstparameter] : _d3_statedata_unserialize_stored($firstparameter);
+
+ //$table = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? $stored['category'] : $stored['agency'];
+
+ $var = $stored['variables'];
+
+ $state = $firstparameter;
+ $appendix = $secondparameter;
+
+
+ $formparam = isset($stored['form']) ? $stored['form'] : array();
+ $formparam2 = isset($stored['form_state']) ? $stored['form_state'] : array();
+
+ $charttable = '';
+$agencyquery = "SELECT `idd_agency`,`vr_agency` from `{d3_states}` where `abbreviation` = '$state'";
+$stateagencies = db_query($agencyquery)->fetchAll(PDO::FETCH_ASSOC);
+$iddagency = $stateagencies[0]['idd_agency'];
+$vragency = $stateagencies[0]['vr_agency'];
+
+   $stategroup = array("US","$state");
+   $stategroup2 = "('" . implode("', '", $stategroup) . "')";
+
+   $query = "SELECT DISTINCT `year` FROM `{d3_acs_post08_AnyDis}`, `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('Perwork') and `{d3_labels}`.table_name = 'sta_d3_acs_post08_AnyDis' AND `state` IN $stategroup2 ORDER BY `year`" ;
+
+   $fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+   $chartarray = array();
+   $varrow = array();
+  switch ($appendix) {
+    case 'app1':
+       $maxyearquery = "SELECT DISTINCT `noDis`.`YEAR` FROM `sta_d3_acs_post08_nodis`
+         `noDis` LEFT JOIN `sta_d3_acs_post08_AnyDis` `anyDis` ON `noDis`.`STATE` = `anyDis`.`STATE` AND `noDis`.`YEAR` =
+          `anyDis`.`YEAR` LEFT JOIN `sta_d3_acs_post08_Cognitive` `postCog` ON `noDis`.`STATE` = `postCog`.`STATE` AND
+           `noDis`.`YEAR` = `postCog`.`YEAR` WHERE (`noDis`.`STATE` = '$state' OR `noDis`.`STATE` = 'US') AND (`noDis`.`YEAR` = (SELECT MAX(`YEAR`) from `sta_d3_acs_post08_nodis` WHERE `STATE` = 'US'))";
+            $maxyear =  db_query($maxyearquery)->fetchField();
+
+           $legend1array = array("Percentage of people with no disability who are employed",
+             "Percentage people with any disability who are employed","Percentage people with a cognitive disability who are employed");
+
+            $subquery = "SELECT FORMAT((`noDis`.`Perwork` * 100),2) `noDisPerwork`, FORMAT((`anyDis`.`Perwork` * 100),2) `anyDisPerwork`,FORMAT((`postCog`.`Perwork` * 100),2) `postCogPerwork` FROM `{d3_acs_post08_nodis}`
+               `noDis` LEFT JOIN `{d3_acs_post08_AnyDis}` `anyDis` ON `noDis`.`STATE` = `anyDis`.`STATE` AND `noDis`.`YEAR` =
+                `anyDis`.`YEAR` LEFT JOIN `{d3_acs_post08_Cognitive}` `postCog` ON `noDis`.`STATE` = `postCog`.`STATE` AND `noDis`.`YEAR` =
+                 `postCog`.`YEAR` WHERE `noDis`.`STATE` IN $stategroup2 and `noDis`.`YEAR` = $maxyear ORDER BY FIELD(`noDis`.`STATE`, 'US','$state')";
+                  $namefields = array('noDisPerwork','anyDisPerwork','postCogPerwork');
+                  $category_name = "Percentage Employed: Working-Age People (Ages 16 to 64), $maxyear";
+           break;
+
+       case 'app2':
+       $maxyearquery = "SELECT DISTINCT MAX(`YEAR`) from `{d3_acs_post08_nodis}` WHERE `STATE` = '$state'";
+            $maxyear =  db_query($maxyearquery)->fetchField();
+           $legend1array = array();
+           break;
+
+
+      case 'app3':
+
+      $maxyearquery = "SELECT DISTINCT MAX(`YEAR`) from `{d3_agency_mrdd}` WHERE `STATE` = '$state'";
+      $legend1array = array("Percentage of people with no disability who are employed",
+        "Percentage people with any disability who are employed","Percentage people with a cognitive disability who are employed");
+         $maxyear =  db_query($maxyearquery)->fetchField();
+
+
+
+        $subquery = "SELECT DISTINCT `agencyMRDD`.`YEAR`, FORMAT((`agencyMRDD`.`Integrated employment percentage rate` * 100), 2) `var` FROM `{d3_agency_mrdd}` `agencyMRDD` WHERE `agencyMRDD`.`STATE` = '$state' AND (`agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 1 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 2 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 5 YEAR)) OR`agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 3 YEAR)) OR`agencyMRDD`.`YEAR` =
+              YEAR(DATE_SUB(NOW(), INTERVAL 4 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 5 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 6 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 7 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 15 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 8 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 15 YEAR)))";
+
+             $category_name = "Percentage of people served in integrated employment, $maxyear";
+
+      break;
+
+      case 'app4':
+
+      $maxyearquery = "SELECT DISTINCT MAX(`YEAR`) from `{d3_agency_mrdd}` WHERE `STATE` = '$state'";
+
+         $maxyear =  db_query($maxyearquery)->fetchField();
+
+
+
+        $subquery = "SELECT DISTINCT `agencyMRDD`.`YEAR`, IF(`agencyMRDD`.`employment money` = -1, 0, FORMAT(((`agencyMRDD`.`employment money`/ `Total funding`) * 100), 2)) `var` FROM `{d3_agency_mrdd}` `agencyMRDD` WHERE `agencyMRDD`.`STATE` = '$state' AND (`agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 1 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 2 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 5 YEAR)) OR`agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 3 YEAR)) OR`agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 4 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 5 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 6 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 7 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 15 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 8 YEAR)) OR `agencyMRDD`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 15 YEAR)))";
+
+             $category_name = "Percentage of total funding spent on integrated employment, $maxyear";
+
+      break;
+
+      case 'app5':
+
+      $maxyearquery = "SELECT DISTINCT `rsaAll`.`YEAR` FROM `{d3_vr_rsa_all}`
+        `rsaAll` LEFT JOIN `{d3_vr_rsa_ID}` `rsaID` ON `rsaAll`.`STATE` = `rsaID`.`STATE` AND `rsaAll`.`YEAR` =
+         `rsaID`.`YEAR` WHERE `rsaAll`.`STATE` = '$state'  AND `rsaID`.`YEAR` = `rsaAll`.`YEAR`  ORDER BY `rsaAll`.`YEAR` DESC LIMIT 1";
+           $maxyear =  db_query($maxyearquery)->fetchField();
+           $maxyear =  db_query($maxyearquery)->fetchField();
+       break;
+
+       case 'app6':
+
+       $maxyearquery = "SELECT DISTINCT `YEAR` from `{d3_vr_rsa_all}` WHERE `STATE` = '$state' ORDER BY `YEAR` DESC LIMIT 1";
+       $legend1array = array("Rehabilitation rate for all closures with an IPE",
+         "Rehabilitation rate for all closures with ID");
+          $maxyear =  db_query($maxyearquery)->fetchField();
+
+
+
+         $subquery = "SELECT DISTINCT `rsaAll`.`YEAR`, IF(`rsaAll`.`REHABRAT` = -1, 0, FORMAT((`rsaAll`.`REHABRAT` * 100), 2)) `varAll`, IF(`rsaID`.`REHABRAT` = -1, 0, FORMAT((`rsaID`.`REHABRAT` * 100), 2)) `varID` FROM `{d3_vr_rsa_all}` `rsaAll` LEFT JOIN `{d3_vr_rsa_ID}` `rsaID` ON `rsaAll`.`STATE` = `rsaID`.`STATE` AND `rsaAll`.`YEAR` = `rsaID`.`YEAR`  WHERE `rsaAll`.`STATE` = '$state' AND (`rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 1 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 2 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 5 YEAR)) OR`rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 3 YEAR)) OR`rsaAll`.`YEAR` =
+               YEAR(DATE_SUB(NOW(), INTERVAL 4 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 5 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 6 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 11 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 7 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 15 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 8 YEAR)) OR `rsaAll`.`YEAR` = YEAR(DATE_SUB(NOW(), INTERVAL 15 YEAR)))";
+
+
+
+
+
+                 $namefields = array('varAll','varID');
+                 $category_name = "Comparison of rehabilitation rate: all closures with an IPE; all closures with ID";
+
+       break;
+
+      default:
+      $maxyearquery = "SELECT DISTINCT `noDis`.`YEAR` FROM `sta_d3_acs_post08_nodis`
+        `noDis` LEFT JOIN `sta_d3_acs_post08_AnyDis` `anyDis` ON `noDis`.`STATE` = `anyDis`.`STATE` AND `noDis`.`YEAR` =
+         `anyDis`.`YEAR` LEFT JOIN `sta_d3_acs_post08_Cognitive` `postCog` ON `noDis`.`STATE` = `postCog`.`STATE` AND
+          `noDis`.`YEAR` = `postCog`.`YEAR` WHERE (`noDis`.`STATE` = '$state' OR `noDis`.`STATE` = 'US') AND (`noDis`.`YEAR` = (SELECT MAX(`YEAR`) from `sta_d3_acs_post08_nodis` WHERE `STATE` = 'US'))";
+           $maxyear =  db_query($maxyearquery)->fetchField();
+
+          $legend1array = array("Percentage of people with no disability who are employed",
+            "Percentage people with any disability who are employed","Percentage people with a cognitive disability who are employed");
+
+            $subquery = "SELECT FORMAT((`noDis`.`Perwork` * 100),2) `noDisPerwork`, FORMAT((`anyDis`.`Perwork` * 100),2) `anyDisPerwork`,FORMAT((`postCog`.`Perwork` * 100),2) `postCogPerwork` FROM `{d3_acs_post08_nodis}`
+              `noDis` LEFT JOIN `{d3_acs_post08_AnyDis}` `anyDis` ON `noDis`.`STATE` = `anyDis`.`STATE` AND `noDis`.`YEAR` =
+               `anyDis`.`YEAR` LEFT JOIN `{d3_acs_post08_Cognitive}` `postCog` ON `noDis`.`STATE` = `postCog`.`STATE` AND `noDis`.`YEAR` =
+                `postCog`.`YEAR` WHERE `noDis`.`STATE` IN $stategroup2 and `noDis`.`YEAR` = $maxyear ORDER BY FIELD(`noDis`.`STATE`, 'US','$state')";
+                 $namefields = array('noDisPerwork','anyDisPerwork','postCogPerwork');
+                 $category_name = "Percentage Employed: Working-Age People (Ages 16 to 64), $maxyear";
+    }
+
+
+   $fields = array($maxyear);
+
+   $varrow = array();
+
+
+     $chartvars = $appendix != 'app2' && $appendix != 'app5' ?  db_query($subquery)->fetchAll(PDO::FETCH_ASSOC) : array();
+
+   $numfields = count($chartvars[0]);
+if ($appendix == 'app1') {
+   for($i = 0; $i < $numfields ; $i ++) {
+
+
+
+ //  $subfield = db_query($subquery)->fetchField();
+   //$number_of_rows = db_query($subquery)->rowCount();
+
+
+ //  $varplace = $number_of_rows == 0 ? "" : $subfield;
+
+
+   $chartarray[$i][] =  $chartvars[0][$namefields[$i]];
+   $chartarray[$i][]=  $chartvars[1][$namefields[$i]];
+
+
+ array_unshift($chartarray[$i],$legend1array[$i]);
+
+
+
+ }
+
+} elseif ($appendix == 'app3' || $appendix == 'app4') {
+  foreach ($chartvars as $entry) {
+  $year = $entry['YEAR'];
+
+  $chartarray [] = array((string)$year, str_replace(',', '', $entry['var']));
+
+}
+
+}
+
+if ($appendix == 'app6') {
+  foreach ($chartvars as $entry) {
+  $year = $entry['YEAR'];
+
+  $chartarray [] = array((string)$year, str_replace(',', '', $entry['varAll']), str_replace(',', '', $entry['varID']));
+
+}
+
+}
+
+ // values for single state
+ $firstfunctions = new oldFunctions;
+
+
+ switch($appendix) {
+   case 'app1':
+
+ $query = "SELECT DISTINCT `YEAR`, FORMAT(`population in 1000s`/1000, 0) `pop`, FORMAT(`unemployment rate`, 1) `unemp` FROM `{d3_agency_labor}`  WHERE `STATE` = '$state' AND (`YEAR` = (SELECT MAX(`YEAR`) from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `YEAR` = (SELECT MAX(`YEAR`) -1 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `YEAR` = (SELECT MAX(`YEAR`) -2 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`YEAR` = (SELECT MAX(`YEAR`) -3 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`YEAR` = (SELECT MAX(`YEAR`) -4 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `YEAR` = (SELECT MAX(`YEAR`) -5 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `YEAR` = (SELECT MAX(`YEAR`) -6 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`YEAR` = (SELECT MAX(`YEAR`) -7 from {d3_acs_post08_nodis} WHERE `STATE` = '$state'))";
+
+ // print $query;
+ // app1
+     $table2query =  "SELECT DISTINCT `noDis`.`YEAR` `chartYEAR`,`noDis`.`STATE` `chartSTATE`, FORMAT(`noDis`.`NUMPOP`, 0) `noDisPop`, FORMAT(`anyDis`.`NUMPOP`, 0) `anyDisPop`,FORMAT(`postCog`.`NUMPOP`, 0) `postCogPop`,FORMAT(`noDis`.`NUMEMP`, 0) `noDisEmp`, FORMAT(`anyDis`.`NUMEMP`, 0) `anyDisEmp`,FORMAT(`postCog`.`NUMEMP`, 0) `postCogEmp`,FORMAT((`noDis`.`Perwork` * 100),1) `noDisPerwork`, FORMAT((`anyDis`.`Perwork` * 100),1) `anyDisPerwork`,FORMAT((`postCog`.`Perwork` * 100),1) `postCogPerwork` FROM `{d3_acs_post08_nodis}`
+       `noDis` LEFT JOIN `{d3_acs_post08_AnyDis}` `anyDis` ON `noDis`.`STATE` = `anyDis`.`STATE` AND `noDis`.`YEAR` =
+        `anyDis`.`YEAR` LEFT JOIN `{d3_acs_post08_Cognitive}` `postCog` ON `noDis`.`STATE` = `postCog`.`STATE` AND
+         `noDis`.`YEAR` = `postCog`.`YEAR` WHERE (`noDis`.`STATE` = '$state' OR `noDis`.`STATE` = 'US') AND (`noDis`.`YEAR` = (SELECT MAX(`YEAR`) from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` =
+          (SELECT MAX(`YEAR`) -1 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -2 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` = (SELECT MAX(`YEAR`) -3 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` =
+           (SELECT MAX(`YEAR`) -4 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -5 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -6 from {d3_acs_post08_nodis} WHERE `STATE` = '$state')  OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -7 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') )";
+ // app2
+   break;
+   case 'app2':
+
+   $query = "SELECT DISTINCT `noDis`.`YEAR`, FORMAT((`noDis`.`Annual_Work_Earnings` / 1000), 1) `noDisEarn`, FORMAT((`anyDis`.`Annual_Work_Earnings`/1000), 1) `anyDisEarn`,FORMAT((`postCog`.`Annual_Work_Earnings`/1000), 1) `postCogEarn`,FORMAT(`noDis`.`WEEHO`, 0) `noDisWEE`, FORMAT(`anyDis`.`WEEHO`, 0) `anyDisWEE`,FORMAT(`postCog`.`WEEHO`, 0) `postCogWEE`,FORMAT(`noDis`.`Below_Poverty`,1) `noDisBePov`, FORMAT(`anyDis`.`Below_Poverty`,1) `anyDisBePov`,FORMAT(`postCog`.`Below_Poverty`,1) `postCogBePov` FROM `{d3_acs_post08_nodis}`
+     `noDis` LEFT JOIN `{d3_acs_post08_AnyDis}` `anyDis` ON `noDis`.`STATE` = `anyDis`.`STATE` AND `noDis`.`YEAR` =
+      `anyDis`.`YEAR` LEFT JOIN `{d3_acs_post08_Cognitive}` `postCog` ON `noDis`.`STATE` = `postCog`.`STATE` AND
+       `noDis`.`YEAR` = `postCog`.`YEAR` WHERE `noDis`.`STATE` = '$state' AND (`noDis`.`YEAR` = (SELECT MAX(`YEAR`) from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -1 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -2 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` = (SELECT MAX(`YEAR`) -3 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` =
+         (SELECT MAX(`YEAR`) -4 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR `noDis`.`YEAR` = (SELECT MAX(`YEAR`) -4 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` =
+         (SELECT MAX(`YEAR`) -5 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` =
+         (SELECT MAX(`YEAR`) -6 from {d3_acs_post08_nodis} WHERE `STATE` = '$state') OR`noDis`.`YEAR` =
+         (SELECT MAX(`YEAR`) -7 from {d3_acs_post08_nodis} WHERE `STATE` = '$state'))";
+
+   // print $query;
+
+       $table2query = "SELECT DISTINCT `AgencySSA`.`YEAR` `chartYEAR`,`AgencySSA`.`STATE` `chartSTATE`, FORMAT(`AgencySSA`.`Total SSI Disabled`,0) `SSADisTot`, FORMAT(`AgencySSA`.`Number Working`,0) `SSANumWk`,  FORMAT(`AgencySSA`.`Percent Working`,1) `SSAPerWk`, FORMAT(`AgencySSA`.`PASS`,0)  `SSAPASS`, FORMAT(`AgencySSA`.`IRWE`,0) `SSAIRWE`, FORMAT(`AgencySSA`.`BWE`,0) `SSABWE` FROM {d3_agency_ssa} `AgencySSA` WHERE `AgencySSA`.`STATE` = '$state' AND (`AgencySSA`.`YEAR` = (SELECT MAX(`YEAR`) from {d3_agency_ssa} WHERE `STATE` = '$state') OR `AgencySSA`.`YEAR` =
+            (SELECT MAX(`YEAR`) -1 from {d3_agency_ssa} WHERE `STATE` = '$state') OR `AgencySSA`.`YEAR` = (SELECT MAX(`YEAR`) -2 from {d3_agency_ssa} WHERE `STATE` = '$state') OR`AgencySSA`.`YEAR` = (SELECT MAX(`YEAR`) -3 from {d3_agency_ssa} WHERE `STATE` = '$state') OR`AgencySSA`.`YEAR` =
+             (SELECT MAX(`YEAR`) -4 from {d3_agency_ssa} WHERE `STATE` = '$state') OR `AgencySSA`.`YEAR` = (SELECT MAX(`YEAR`) -5 from {d3_agency_ssa} WHERE `STATE` = '$state') OR `AgencySSA`.`YEAR` = (SELECT MAX(`YEAR`) -6 from {d3_agency_ssa} WHERE `STATE` = '$state') OR `AgencySSA`.`YEAR` = (SELECT MAX(`YEAR`) -7 from {d3_agency_ssa} WHERE `STATE` = '$state') )" ;
+
+   break;
+// appendix 3
+   case 'app3':
+
+   $query = $state == 'US' ? "SELECT DISTINCT `agencyMRDD`.`YEAR`, FORMAT(`agencyMRDD`.`Total served`, 0) `TtlServed`, FORMAT(`agencyMRDD`.`Integrated employment`, 0) `numInt`,FORMAT((`agencyMRDD`.`Integrated employment percentage rate` * 100), 1) `IntPerRate`,FORMAT(`agencyMRDD`.`Integrated employment rate`, 1) `agencyMRDD`,FORMAT(`agencyMRDD`.`FBW_US_Count`,0) `FacWkNum`, FORMAT((`agencyMRDD`.`Facility-based work percentage rate` * 100),1) `FacWkPer`,FORMAT(`agencyMRDD`.`FBNW_US_Count`,0) `FacnonWkNum`,FORMAT((`agencyMRDD`.`Facility-based nonwork percentage rate` * 100),1) `FacnonWkPer`,FORMAT(`agencyMRDD`.`CBNW_US_Count`,0) `ComnonWkNum`,FORMAT((`agencyMRDD`.`Community based nonwork percentage rate` * 100),1) `ComnonWkPer`,FORMAT(`agencyMRDD`.`FBWandNW_US_Count`,0) `ComFacnNum`,FORMAT((`agencyMRDD`.`Facility-based and nonwork settings percentage rate` * 100),1) `ComFacnonWkPer`,FORMAT(`agencyMRDD`.`MRDDWaiting`,0) `Waiting` FROM `{d3_agency_mrdd}`
+   `agencyMRDD` WHERE `agencyMRDD`.`STATE` = '$state' AND (`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`)from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` =
+      (SELECT MAX(`YEAR`) - 1 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 3 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` =
+       (SELECT MAX(`YEAR`) - 4 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_agency_mrdd} WHERE `STATE` = '$state') )" : "SELECT DISTINCT `agencyMRDD`.`YEAR`, FORMAT(`agencyMRDD`.`Total served`, 0) `TtlServed`, FORMAT(`agencyMRDD`.`Integrated employment`, 0) `numInt`,FORMAT((`agencyMRDD`.`Integrated employment percentage rate` * 100), 1) `IntPerRate`,FORMAT(`agencyMRDD`.`Integrated employment rate`, 1) `agencyMRDD`,FORMAT(`agencyMRDD`.`Facility-based work`,0) `FacWkNum`, FORMAT((`agencyMRDD`.`Facility-based work percentage rate` * 100),1) `FacWkPer`,FORMAT(`agencyMRDD`.`Facility-based nonwork`,0) `FacnonWkNum`,FORMAT((`agencyMRDD`.`Facility-based nonwork percentage rate` * 100),1) `FacnonWkPer`,FORMAT(`agencyMRDD`.`Community based nonwork`,0) `ComnonWkNum`,FORMAT((`agencyMRDD`.`Community based nonwork percentage rate` * 100),1) `ComnonWkPer`,FORMAT(`agencyMRDD`.`Facility-based and nonwork settings`,0) `ComFacnNum`,FORMAT((`agencyMRDD`.`Facility-based and nonwork settings percentage rate` * 100),1) `ComFacnonWkPer`,FORMAT(`agencyMRDD`.`MRDDWaiting`,0) `Waiting` FROM `{d3_agency_mrdd}`
+     `agencyMRDD` WHERE `agencyMRDD`.`STATE` = '$state' AND (`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`)from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` =
+        (SELECT MAX(`YEAR`) - 1 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 3 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` =
+         (SELECT MAX(`YEAR`) - 4 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_agency_mrdd} WHERE `STATE` = '$state') )";
+
+   // print $query;
+
+
+
+   break;
+
+   case 'app4':
+// Table 6
+   $query = $state == 'US' ? "SELECT DISTINCT `agencyMRDD`.`YEAR`, FORMAT((`agencyMRDD`.`Total funding`/1000), 0) `TtlFund`, FORMAT((`agencyMRDD`.`employment money`/1000),0) `EmpMoney`, `agencyMRDD`.`YEAR`, IF(`agencyMRDD`.`employment money` = -1 OR `Total funding` = -1, 0, FORMAT(((`agencyMRDD`.`employment money`/ `Total funding`) * 100),1)) `IntEmp_Fund_percent`, FORMAT((`agencyMRDD`.`FBWFund`/1000),0) `FBW`, FORMAT(`FBW_US_Count`,0) `FBWFundingCount`, FORMAT((`agencyMRDD`.`FBNWFund`/1000),0) `FBNW`, FORMAT(`FBNW_US_Count`,0) `FBNWFundingCount`, FORMAT((`agencyMRDD`.`CBNWFund`/1000),0) `CBNW`, FORMAT(`CBNW_US_Count`,0) `CBNWFundingCount` FROM `{d3_agency_mrdd}` `agencyMRDD` WHERE `agencyMRDD`.`STATE` = '$state' AND (`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`)from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` =
+   (SELECT MAX(`YEAR`) - 1 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 3 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` =
+    (SELECT MAX(`YEAR`) - 4 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_agency_mrdd} WHERE `STATE` = '$state') )" : "SELECT DISTINCT `agencyMRDD`.`YEAR`, FORMAT((`agencyMRDD`.`Total funding`/1000), 0) `TtlFund`, FORMAT((`agencyMRDD`.`employment money`/1000),0) `EmpMoney`, `agencyMRDD`.`YEAR`, IF(`agencyMRDD`.`employment money` = -1 OR `Total funding` = -1, 0, FORMAT(((`agencyMRDD`.`employment money`/ `Total funding`) * 100),1)) `IntEmp_Fund_percent`, FORMAT((`agencyMRDD`.`FBWFund`/1000),0) `FBW`, FORMAT((`agencyMRDD`.`FBNWFund`/1000),0) `FBNW`, FORMAT((`agencyMRDD`.`CBNWFund`/1000),0) `CBNW` FROM `{d3_agency_mrdd}` `agencyMRDD` WHERE `agencyMRDD`.`STATE` = '$state' AND (`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`)from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` =
+      (SELECT MAX(`YEAR`) - 1 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 3 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR`agencyMRDD`.`YEAR` =
+       (SELECT MAX(`YEAR`) - 4 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_agency_mrdd} WHERE `STATE` = '$state') OR `agencyMRDD`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_agency_mrdd} WHERE `STATE` = '$state') )";
+
+   // print $query;
+
+
+
+   break;
+
+   case 'app5':
+   $query = "SELECT DISTINCT `rsaAll`.`YEAR`, FORMAT(`rsaAll`.`CLOSURES`, 0) `allCLOS`, FORMAT(`rsaID`.`CLOSURES`, 0) `IDCLOS`, FORMAT(`rsaAll`.`REHABED`, 0) `allREHAB`, FORMAT(`rsaID`.`REHABED`, 0) `IDREHAB`,  FORMAT(`rsaAll`.`NOTRE28`, 0) `allNOT`, FORMAT(`rsaID`.`NOTRE28`, 0) `IDNOT`, IF(`rsaAll`.`REHABRAT` = -1, 0 ,FORMAT((`rsaAll`.`REHABRAT` * 100), 1)) `allREHABRAT`, IF(`rsaID`.`REHABRAT` = -1, 0, FORMAT((`rsaID`.`REHABRAT` * 100), 2)) `IDREHABRAT`, IF(`rsaAll`.`REHABED` = -1, -1, FORMAT(((`rsaAll`.`REHABED`/`rsaAll`.`CLOSURES`) * 100), 1)) `allPctAllClos`, IF(`rsaID`.`REHABED` = -1, -1, FORMAT(((`rsaID`.`REHABED`/`rsaID`.`CLOSURES`) * 100), 1)) `IDPctAllClos` FROM `{d3_vr_rsa_all}` `rsaAll` LEFT JOIN `{d3_vr_rsa_ID}` `rsaID` ON `rsaAll`.`STATE` = `rsaID`.`STATE` AND `rsaAll`.`YEAR` =
+    `rsaID`.`YEAR` WHERE `rsaAll`.`STATE` = '$state'  AND (`rsaAll`.`YEAR` =  (SELECT MAX(`YEAR`) from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` =
+    (SELECT MAX(`YEAR`) - 1 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR`rsaAll`.`YEAR` =(SELECT MAX(`YEAR`) - 3 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR`rsaAll`.`YEAR` =
+     (SELECT MAX(`YEAR`) - 4 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_vr_rsa_all} WHERE `STATE` = '$state') )";
+
+       $table2query =  "SELECT DISTINCT `rsaAll`.`YEAR` `chartYEAR`, `rsaAll`.`STATE` `chartSTATE`, concat('$',FORMAT(`rsaAll`.`earnings`, 2)) `allEarnings`, concat('$',FORMAT(`rsaID`.`earnings`, 2)) `IDEarnings`,  FORMAT(`rsaAll`.`hours` , 1) `allHours`,  FORMAT(`rsaID`.`hours` ,1) `IDHours`, FORMAT(`rsaAll`.`incidence`, 1) `allIncidence`, FORMAT(`rsaID`.`incidence`, 1) `IDIncidence`FROM `{d3_vr_rsa_all}` `rsaAll` LEFT JOIN `{d3_vr_rsa_ID}` `rsaID` ON `rsaAll`.`STATE` = `rsaID`.`STATE` AND `rsaAll`.`YEAR` =
+        `rsaID`.`YEAR` WHERE `rsaAll`.`STATE` = '$state'  AND(`rsaAll`.`YEAR` =  (SELECT MAX(`YEAR`) from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` =
+        (SELECT MAX(`YEAR`) - 1 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR`rsaAll`.`YEAR` =(SELECT MAX(`YEAR`) - 3 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR`rsaAll`.`YEAR` =
+         (SELECT MAX(`YEAR`) - 4 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_vr_rsa_all} WHERE `STATE` = '$state') )";
+   // app2
+     break;
+
+     case 'app6':
+
+
+         $query =  "SELECT DISTINCT `rsaAll`.`YEAR`, concat('$',FORMAT(`rsaAll`.`cost`, 0)) `allCost`, concat('$',FORMAT(`rsaID`.`cost`, 0)) `IDCost`,  FORMAT(`rsaAll`.`App_to_elig` , 0) `allAppElig`,  FORMAT(`rsaID`.`App_to_elig` , 0) `IDAppElig`,FORMAT(`rsaAll`.`Elig_to_closure` , 0) `allEligClos`,  FORMAT(`rsaID`.`Elig_to_closure` , 0) `IDEligClos` FROM `{d3_vr_rsa_all}` `rsaAll` LEFT JOIN `{d3_vr_rsa_ID}` `rsaID` ON `rsaAll`.`STATE` = `rsaID`.`STATE` AND `rsaAll`.`YEAR` =
+          `rsaID`.`YEAR` WHERE `rsaAll`.`STATE` = '$state'  AND (`rsaAll`.`YEAR` =  (SELECT MAX(`YEAR`) from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` =
+          (SELECT MAX(`YEAR`) - 1 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 2 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR`rsaAll`.`YEAR` =(SELECT MAX(`YEAR`) - 3 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR`rsaAll`.`YEAR` =
+           (SELECT MAX(`YEAR`) - 4 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 5 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 6 from {d3_vr_rsa_all} WHERE `STATE` = '$state') OR `rsaAll`.`YEAR` = (SELECT MAX(`YEAR`) - 7 from {d3_vr_rsa_all} WHERE `STATE` = '$state') )";
+     // app2
+       break;
+
+   default:
+   $query = "";
+   $table2query = "";
+
+ }
+ $totalstatecount = false;
+  $totalusfield = null;
+ if(($var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based nonwork percentage rate' || $var == 'Facility-based and nonwork settings percentage rate') && $state == 'US') {
+ $totalstatecount = true;
+
+  switch($var) {
+  case 'Community based nonwork percentage rate':
+  $totalusfield = "CBNW_US_Count";
+  $totalustext = "comm. based nonwork";
+  break;
+  case 'Facility-based work percentage rate':
+  $totalusfield = "FBW_US_Count";
+  $totalustext = "fac. based work";
+  break;
+
+  case 'Facility-based and nonwork settings percentage rate':
+  $totalusfield = "FBWandNW_US_Count";
+  $totalustext = "fac. based and nonwork settings";
+  break;
+
+  case 'Facility-based nonwork percentage rate':
+  $totalusfield = "FBNW_US_Count";
+  $totalustext = "fac. based nonwork";
+  break;
+
+  default:
+  $totalusfield = "CBNW_US_Count";
+  $totalustext = "comm. based nonwork";
+  break;
+  }
+ $statetotalquery = "SELECT DISTINCT `year`,  FORMAT(`$totalusfield`, 0) AS `var` FROM `sta_d3_agency_mrdd` WHERE `STATE` = 'US' ORDER BY `year`";
+ $totalstatefields = db_query($statetotalquery)->fetchAll(PDO::FETCH_ASSOC);
+
+ foreach ($totalstatefields as $entry) {
+ $year = $entry['year'];
+
+
+ $ustotaldbrow2 [] = array('year' => "$year", 'var' => $entry['var'] );
+
+ }
+
+ foreach ($ustotaldbrow2 as $row) {
+ 	if ($row['var'] ."" == "-1") {
+ 		 /* $row['var'] = 0; }
+    	if ($row['var'] ."" == "0") { */
+    		$row['var'] = " - - ";
+ 	}
+ 	$usdata['years']	.= $sep . $row['YEAR'];
+ 	$usdata['var']	.= $sep . $row['var'];
+ 	$usdlData			.= $sep . $row['var'];
+ 	$sep 			= ';';
+    }
+
+
+
+ }
+$varlegend1 = array();
+$varlegend2 = array();
+ $table2 = 'sta_d3_acs_post08_nodis';
+ $table3 = 'sta_d3_acs_post08_AnyDis';
+ $table4 = 'sta_d3_acs_post08_Cognitive';
+ $justfunctions = new oldFunctions;
+ $stategrab = $justfunctions->translateState($state);
+ switch($appendix) {
+   case 'app1':
+ $table1legend = "Table 1: Demographic Trends";
+ $table2legend = "Table 2: Employment Participation for Working-Age People (Ages 16 to 64)";
+ $varLegend1[0]	=  "State population (in thousands)";
+     $varLegend1[1]	=  "State unemployment rate (%)";
+ $varLegend2[0]	=  "Number of people with no disability";
+ $varLegend2[1]	=  "Number of people with any disability
+ ";
+ $varLegend2[2]	=  "Number of people with a cognitive disability";
+ $varLegend2[3]	=  "Number of people with no disability who are employed";
+ $varLegend2[4]	=  "Number of people with any disability who are employed";
+ $varLegend2[5]	=  "Number of people with a cognitive disability who are employed";
+ $varLegend2[6]	=  "Percentage of people with no disability who are employed";
+ $varLegend2[7]	=  "Percentage people with any disability who are employed";
+ $varLegend2[8]	=  "Percentage people with a cognitive disability who are employed";
+  $chartlegend = "<h3>State: " . $stategrab . "<br />$category_name</h3>";
+ $pagetitle = drupal_set_title("Population Statistics");
+ $table1source = "<p>Source: U.S. Bureau of Labor Statistics</p>";
+ $table2source = "<p>Source: American Community Survey (ACS)</p>";
+ $tableclass1 = "app1Table1";
+ $tableclass2 = "app1Table2";
+ break;
+ case 'app2':
+
+ $table1legend = "Table 3: Employment Outcomes for Working-Age People (Ages 16 to 64)";
+ $table2legend = "Table 4: Employment and Work Incentive Program Participation for Supplemental Security Income (SSI) Beneficiaries";
+ $varLegend1[0]	=  "Mean annual earnings from work for people with no disability (in thousands of dollars)";
+ $varLegend1[1]	=  "Mean annual earnings from work for people with any disability (in thousands of dollars)";
+ $varLegend1[2]	=  "Mean annual earnings from work for people with a cognitive disability (in thousands of dollars)";
+ $varLegend1[3]	=  "Mean weekly hours worked for people with no disability";
+ $varLegend1[4]	=  "Mean weekly hours worked for people with any disability";
+ $varLegend1[5]	=  "Mean weekly hours worked for people with a cognitive disability";
+ $varLegend1[6]	=  "Percentage of people with no disability living below the poverty line";
+ $varLegend1[7]	=  "Percentage of people with any disability living below the poverty line";
+ $varLegend1[8]	=  "Percentage of people with a cognitive disability living below the poverty line";
+
+ $varLegend2[0]	=  "Total number of SSI recipients with disabilities";
+ $varLegend2[1]	=  "Number of SSI recipients with disabilities who are working";
+ $varLegend2[2]	=  "Percentage of SSI recipients with disabilities who are working";
+ $varLegend2[3]	=  "SSI recipients with disabilities who received Plans for Achieving Self-Support (PASS) benefits";
+ $varLegend2[4]	=  "SSI recipients with disabilities who received Impairment Related Work Expenses (IRWE) benefits";
+ $varLegend2[5]	=  "SSI recipients with disabilities who received Blind Work Expenses (BWE) benefits";
+
+  $chartlegend = "<h3>State: " . $stategrab . "<br />$category_name</h3>";
+ $pagetitle = drupal_set_title("Population Statistics: Social Security Disability Benefit Recipient Statistics");
+ $table1source = "<p>Source: American Community Survey (ACS)</p>";
+ $table2source = "<p>Source: Social Security Administration, \"SSI Disabled Recipients Who Work\" </p>";
+ $tableclass1 = "app2Table1";
+ $tableclass2 = "app2Table2";
+ break;
+
+ case 'app3':
+
+ $table1legend = "Table 5: Intellectual and Developmental Disability (IDD) Agency Outcomes by Employment Settings";
+
+ $varLegend1[0]	=  "Total number of people served";
+ $varLegend1[1]	=  "Number of people served in integrated employment";
+ $varLegend1[2]	=  "Percentage of people served in integrated employment";
+ $varLegend1[3]	=  "People served in integrated employment per 100K state population";
+ $varLegend1[4]	=  $state == 'US' ? "Number of states reporting people in facility-based work" : "Number of people served in facility-based work";
+ $varLegend1[5]	=  "Percentage of people served in facility-based work";
+ $varLegend1[6]	=  $state == 'US' ? "Number of states reporting people in facility-based non-work" : "Number of people served in facility-based non-work";
+ $varLegend1[7]	=  "Percentage of people served in facility-based non-work";
+ $varLegend1[8]	= $state == 'US' ? "Number of states reporting people in community-based non-work" : "Number of people served in community-based non-work";
+ $varLegend1[9]	=  "Percentage of people served in community-based non-work";
+ $varLegend1[10]	=  $state == 'US' ? "Number of states reporting people served in facility-based and non-work settings" : "Number of people served in facility-based and non-work settings*";
+ $varLegend1[11]	=  "Percentage of people served in facility-based and non-work settings*";
+ $varLegend1[12]	=  "Number on waiting list for day and employment services";
+ $tableclass1 = "app3Table1";
+ $table1source = "<p>Source: The National Survey of State Intellectual and Developmental Disabilities Agencies' Employment and Day Services</p>";
+
+
+
+  $chartlegend = "<h3>State: " . $stategrab . "<br />$category_name</h3>";
+ $pagetitle = drupal_set_title("$iddagency");
+ break;
+
+ case 'app4':
+
+ $table1legend = "Table 6: IDD Agency Day and Employment Spending by Setting (in thousands of dollars)";
+
+ $varLegend1[0]	=  "Total funding for all IDD agency services";
+ $varLegend1[1]	=  "Integrated employment funding";
+ $varLegend1[2]	=  "Percentage of total funding to integrated employment";
+ $varLegend1[3]	=  "Facility-based work funding";
+ if($state == 'US') {
+ $varLegend1[4]	=  "Number of states reporting funding for facility-based work";
+ $varLegend1[5]	=  "Facility-based non-work funding";
+ $varLegend1[6]	=  "Number of states reporting funding for facility-based non-work";
+ $varLegend1[7]	=  "Community-based non-work funding";
+ $varLegend1[8]	=  "Number of states reporting funding for community-based non-work";
+ } else {
+
+ $varLegend1[4]	=  "Facility-based non-work funding";
+ $varLegend1[5]	=  "Community-based non-work funding";
+
+ }
+ $tableclass1 = "app4Table1";
+ $table1source = "<p>Source: The National Survey of State Intellectual and Developmental Disabilities Agencies' Employment and Day Services</p>";
+
+
+
+  $chartlegend = "<h3>State: " . $stategrab . "<br />$category_name</h3>";
+ $pagetitle = drupal_set_title("$iddagency");
+ break;
+
+ case 'app5':
+
+ $table1legend = "Table 7: Vocational Rehabilitation (VR) Case Closures and Employment Outcomes";
+ $table2legend = "Table 8: Vocational Rehabilitation (VR) Employment Outcomes";
+ $varLegend1[0]	=  "Total number of closures";
+ $varLegend1[1]	=  "Total number of closures with ID";
+// $varLegend1[2]	=  "Percentage of closures who are people with ID";
+ $varLegend1[2]	=  "Closures into an employment setting";
+ $varLegend1[3]	=  "Closures with ID into an employment setting";
+ // $varLegend1[4]	=  "Percentage of closures into employment that were people with ID";
+ $varLegend1[4]	=  "Closures with an IPE but no employment outcome";
+ $varLegend1[5]	=  "Closures with ID and an IPE but no employment outcome";
+ $varLegend1[6]	=  "Rehabilitation rate for all closures with an IPE";
+ $varLegend1[7]	=  "Rehabilitation rate for all closures with ID**";
+ $varLegend1[8]	=  "Percentage of all closures into employment";
+ $varLegend1[9]	=  "Percentage of all closures with ID into employment";
+
+ $varLegend2[0]	=  "Mean weekly earnings at closure";
+ $varLegend2[1]	=  "Mean weekly earnings for closures with ID";
+ $varLegend2[2]	=  "Mean weekly hours worked at closure";
+ $varLegend2[3]	=  "Mean weekly hours worked for closures with ID";
+ $varLegend2[4]	=  "Number of closures into employment per 100K state population";
+ $varLegend2[5]	=  "Number of closures with ID into employment per 100K state population";
+ $tableclass1 = "app5Table1";
+ $tableclass2 = "app5Table2";
+$table1source = "<p>Source: Rehabilitation Services Administration 911 (RSA-911)</p>";
+$table2source = "<p>Source: Rehabilitation Services Administration 911 (RSA-911)</p>";
+  $chartlegend = "<h3>State: " . $stategrab . "<br />$category_name</h3>";
+ $pagetitle = drupal_set_title("$vragency");
+
+ break;
+
+ case 'app6':
+
+ $table1legend = "Table 9: Vocational Rehabilitation (VR) Employment Outcomes";
+
+ $varLegend1[0]	=  "Average cost of purchased services";
+ $varLegend1[1]	=  "Average cost of purchased services for closures with ID
+";
+ $varLegend1[2]	=  "Average days from application to eligibility";
+ $varLegend1[3]	=  "Average days from application to eligibility for closures with ID";
+ $varLegend1[4]	=  "Average days from eligibility to closure";
+ $varLegend1[5]	=  "Average days from eligibility to closure for closures with ID";
+ $tableclass1 = "app5Table1";
+
+
+
+  $chartlegend = "<h3>State: " . $stategrab . "<br />$category_name</h3>";
+ $pagetitle = drupal_set_title("$vragency");
+ break;
+ }
+
+ $fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+ $fields2 =  $appendix != 'app3' && $appendix != 'app4' && $appendix != 'app6' ? db_query($table2query)->fetchAll(PDO::FETCH_ASSOC) : array();
+ $query2 = "SELECT DISTINCT `short_name` from `{d3_labels}` where `column_name` IN ('noDisPerwork')";
+     $queryunemp = "SELECT DISTINCT `short_name` from `{d3_labels}` where `column_name` IN ('unemploymentrate')";
+ $label1 = db_query($query2)->fetchField();
+     $label2 = db_query($queryunemp)->fetchField();
+
+
+
+ $repeatform = drupal_render(drupal_get_form('d3_statedata_dependent_appendix'));
+
+
+
+
+ $dbrow = array();
+ $dbrow2 = array();
+ $statematch = array();
+ $sep	= '';
+ $dlData = $stategrab . ':';
+ $count = count($fields);
+
+     foreach($fields as $entry){
+
+
+
+   $year = $entry['YEAR'];
+
+   $dbrow [] = array((string)$year, str_replace(',', '', $entry['pop']));
+ $dbrow2 [] = $entry;
+
+$year = $entry['YEAR'];
+
+
+
+ }
+
+ $data	= array();
+
+ foreach ($dbrow2 as $row) {
+
+
+   foreach ($row as $key => $value) {
+    if ($value  == "-1" || $value  == "-100" || $value == "-0") {
+       $value = " - - "; }
+      if ($value ."" == NULL) {
+         $value = " - - ";
+     } 
+     if(($key == 'unemp' || $key == 'noDisPerwork' || $key == 'noDisBePov' || $key == 'anyDisBePov' || $key == 'postCogBePov' || $key == 'IntPerRate' || $key =='FacWkPer' || $key == 'FacnonWkPer' || $key == 'ComnonWkPer'|| $key == 'ComFacnonWkPer' || $key == 'Int_Emp_Fund_percent' || $key == 'IDPctAllClos' || $key == 'allPctAllClos' || $key == 'IDREHABRAT' || $key == 'allREHABRAT') && ($value  != "-1" && $value  != "-100" && $value != '' && $value != " - - ")) $value = $value . "%";
+if(($key == 'noDisEarn' || $key == 'anyDisEarn' || $key == 'postCogEarn' || $key == 'TtlFund' || $key == 'XIX' || $key == 'XIXWaiv' || $key == 'EmpMoney' || $key == 'StLoc' || $key == 'XX' || $key == 'FBW' || $key == 'FBNW' || $key == 'CBNW') && ($value  != "-1" && $value  != "-100" && $value != '' && $value != " - - ") ) $value = '$' . $value;
+     $data["$key"]	.= $sep . $value;
+
+
+
+
+      }
+
+ 	$data['years']	.= $sep . $row['YEAR'];
+
+
+
+ 	$dlData			.= $sep . $row['pop'];
+ 	$sep 			= ';';
+    }
+
+    $dbrow2tbl = array();
+    $dbrow2tbl2 = array();
+    $statematch = array();
+    $sep2	= '';
+
+    $maxyear = null;
+
+    foreach ($fields2 as $item) {
+      $maxyear = $max === null ? $item['chartYEAR'] : max($maxyear, $item['chartYEAR']);
+    }
+if($fields2) {
+        foreach($fields2 as $entry2){
+
+ $year2 = $entry2['chartYEAR'];
+
+    if ($year2 == $maxyear) {
+
+    $dbrow2tbl [] = array((string)$year2, str_replace(',', '', $entry2['noDisPerwork']));
+  }
+    if ($entry2['chartSTATE'] == $state) {
+    $dbrow2tbl2 [] = $entry2;
+  }
+    }
+
+    $data2	= array();
+    foreach ($dbrow2tbl2 as $row) { foreach ($row as $key => $value) {
+    	if ($value ."" == "-1") {
+    		$value = 0; }
+       	if ($value ."" == "0") {
+       		$value = " - - ";
+    	}
+if(($key == 'noDisPerwork' || $key == 'anyDisPerwork' || $key == 'postCogPerwork' || $key == 'SSAPerWk') && ($value  != "-1" && $value  != "-100" && $value != '' && $value != " - - ")) $value = $value . "%";
+    	$data2["$key"]	.= $sep2 . $value;
+
+
+
+
+       }
+       	$sep2 			= ';';
+
+     }
+
+
+
+}
+
+
+ $charttable	.= "<table class=\"charttable $tableclass1\" border=\"1\" cellspacing=\"0\"><caption>$table1legend</caption><thead><tr><th scope=\"row\">&nbsp;</th><th>"
+
+ 			. str_replace(';', '</th><th>', $data['years']) . "</th></tr></thead><tbody><tr>";
+      unset($data['years']); unset($data['YEAR']);
+    $variablearray = array();
+      foreach($data as $key => $value)
+      {$variablearray []= $key;}
+
+
+for ($i = 0; $i < count($variablearray); $i++) {
+      $charttable .= "<th scope\"row\">" . $varLegend1[$i] . "</th><td>"
+ 			. str_replace(array(';', '-1.00'), array('</td><td>', ' - '), $data[$variablearray[$i]]) . "</td></tr>" ;
+    }
+  /*   "<tr><th scope\"row\">" . $varLegend1[1] . "</th><td>"
+
+     . str_replace(array(';', '-1.00'), array('</td><td>', ' - '), $data['unemp']) . "</td></tr>" . */
+
+
+
+        $charttable	.=   "</tbody></table>$table1source";
+if($fields2) {
+       $charttable	.=
+       			"<br /><br /><table class=\"charttable $tableclass2\" border=\"1\" cellspacing=\"0\"><caption>$table2legend</caption><thead><tr><th scope=\"row\">&nbsp;</th><th>"
+       			. str_replace(';', '</th><th>', $data2['chartYEAR']) . "</th></tr></thead><tbody>";
+
+            unset($data2['chartYEAR']);
+            unset($data2['chartSTATE']);
+
+          //  print_r($fields2);
+          $variablearray2 = array();
+
+            foreach($data2 as $key => $value)
+            {$variablearray2 []= $key;}
+
+
+          for ($i = 0; $i < count($variablearray2); $i++) {
+
+          $charttable .=  "<tr><th scope\"row\">" . $varLegend2[$i] . "</th><td>"
+       			. str_replace(array(';', '-1.00'), array('</td><td>', ' - '), $data2[$variablearray2[$i]]) . "</td></tr>";
+          }
+
+
+             $charttable .=   "</tbody></table>$table2source";
+
+           }
+
+
+   // end values for single state
+
+   // print_r((isset($stored['addstates']) ? $dbrow : $chartarray));
+  // $recentblock = _d3_statedata_recent_searches($firstparameter);
+
+   $charttable .= "<p></p>";
+   $formbutton = '<div class="fancybox buildBut" rel="group" href="#formRedo"><span>Modify your chart or build a new one.</span></div>';
+
+   $citation = "<div id=\"citation\"<p><strong>Suggested Citation:</strong> Statedata.info. (" . date('Y') . "). <em>$pagetitle. $stategrab: $varLegend.</em><br />Retrieved " . date("m/d/Y") . " from " . "http://" . $_SERVER['HTTP_HOST']  .  "/data/appendix/$firstparameter" . "</p></div>";
+
+
+
+   $chart = array(
+     'id' => 'visualization',
+     'type' => 'StateData',
+     'legend' => ($appendix != 'app3' && $appendix != 'app4' && $appendix != 'app6' ? array("U.S.","$state") : ($appendix == 'app6' ? array('Rehabilitation rate for all closures with an IPE','Rehabilitation rate for all closures with ID') : array("$state"))),
+     'formbutton' => $formbutton,
+  'rows' => ($appendix != 'app2' && $appendix != 'app5' ? $chartarray: ''),
+   'chartlegend' => ($appendix != 'app2' && $appendix != 'app5' ? $chartlegend : "$state"),
+     'charttable' => $charttable,
+     'recentblock' => '',
+     'repeatform' => $repeatform,
+   );
+
+ return (d3_draw($chart));
+
+ }
+ function d3_statedata_chart($firstparameter = '') {
+
+
+  $stored =   isset($_SESSION["vars" . $firstparameter]) ? $_SESSION["vars" . $firstparameter] : _d3_statedata_unserialize_stored($firstparameter);
+  
+  
+  $table = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? $stored['category'] : $stored['agency'];
+  
+  $var = $stored['variables'];
+  $state = $stored['statechoice'];
+  
+  
+  $formparam = isset($stored['form']) ? $stored['form'] : array();
+  $formparam2 = isset($stored['form_state']) ? $stored['form_state'] : array();
+  
+  $charttable = '';
+  
+  if (isset($stored['addstates'])) {
+  
+  // values for multiple states
+  $queryarray = array("$state");
+  
+  
+   foreach($stored['addstates'] as $key => $value) {
+   $queryarray[] = "$value"; }
+  
+  sort($queryarray);
+  $stategroup =  "('" . implode("', '", $queryarray) . "')";
+  $firstfunctions = new oldFunctions;
+  $category_name = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? ", " . $firstfunctions->getAgency($stored['category']) : "";
+  
+  $statematch = array();
+  $nodata = array();
+  
+  $matchquery =   "SELECT DISTINCT `abbreviation`, `name` from {d3_states} WHERE `abbreviation` in (SELECT DISTINCT `state`
+  FROM `$table`, `{d3_labels}` WHERE {d3_labels}.column_name IN ('$var') and `{d3_labels}`.`table_name` = '$table' AND `state` IN $stategroup) ORDER BY `abbreviation`";
+  $missingfields = db_query($matchquery)->fetchAll(PDO::FETCH_ASSOC);
+  
+   foreach ($missingfields as $entry) {
+  $statematch[]= $entry['abbreviation']; }
+  
+   $nodata = array_diff($queryarray, $statematch);
+   $statearray = count(array_unique($statematch)) < count($queryarray) ? array_unique($statematch) : $queryarray;
+   $stategroup2  = count(array_unique($statematch)) < count($queryarray) ?  "('" . implode("', '", $statematch) . "')" : $stategroup;
+  
+  /* $query =  "SELECT `year`, GROUP_CONCAT(IF(`$var` = -1, '', IF( `{d3_labels}`.format = 'integer', REPLACE(FORMAT(`$var`, 0),',',''), REPLACE(FORMAT(`$var`, 2),',',''))) ORDER BY `state` SEPARATOR ';') AS `vars`
+  FROM `$table`, `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' AND `state` IN $stategroup2 GROUP BY `year` ORDER BY `year`";
+  
+  $fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC); */
+  
+   $query = "SELECT DISTINCT `year` FROM `$table`, `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' AND `state` IN $stategroup2 ORDER BY `year`" ;
+  
+  $fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+  $chartarray = array();
+  $varrow = array();
+  foreach ($fields as $entry) {
+  $varrow = array();
+  
+  
+  for ($i = 0; $i < count($statearray); $i++) {
+  $subquery = "SELECT IF(`$var` = -1, '', IF( `{d3_labels}`.format = 'integer', REPLACE(FORMAT(`$var`, 0),',',''), REPLACE(FORMAT(`$var`, 2),',',''))) AS `vars` FROM `$table`, `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' AND `state` = '" .$statearray[$i] . "' and year = " . $entry['year'] ;
+  $subfield = db_query($subquery)->fetchField();
+  $number_of_rows = db_query($subquery)->rowCount();
+  $varplace = $number_of_rows == 0 ? "" : $subfield;
+  $varrow[] =  $varplace;
+  }
+  
+   array_unshift($varrow, $entry['year']);
+   $chartarray[] = $varrow;
+  
+  
+  
+  
+  }
+  
+  if (!empty($nodata)) {
+  $nodatatext = implode(",", $nodata); }
+  
+  
+  $query2 = "SELECT `name` from `{d3_states}` where `abbreviation` IN $stategroup2 ORDER BY `abbreviation`";
+  $label = db_query($query2)->fetchAll(PDO::FETCH_ASSOC);
+  $countrows = db_query($query2)->rowCount();
+  $labelarray = array();
+  foreach ($label as $statelabel) { $labelarray[] = $statelabel['name']; }
+  $justfunctions = new oldFunctions;
+  $stategrab = implode(', ',$labelarray);
+  $varLegend	=  $justfunctions->get_legend_name($table, $var);
+   $chartlegend = "<h3>States: " . $stategrab . "<br />$varLegend</h3>";
+   $chartlegend .= !empty($nodata) ? "<h3>No data available for: $nodatatext</h3>" : "";
+   $formatdouble ="FORMAT(`$var`, 2)";
+   if ($var == 'REHABRAT' || $var == 'Perwork'|| $var == 'Integrated employment percentage rate' || $var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based nonwork percentage rate' || $var == 'Facility-based and nonwork settings percentage rate' || $var == 'IntEmp_Fund_percent') $formatdouble = "CONCAT(FORMAT((`$var` * 100), 1),'%')";
+   if ($var == 'unemployment rate' || $var == 'Below_Poverty') $formatdouble = "CONCAT(FORMAT(`$var`,2),'%')";
+   $query3 =  "SELECT `{d3_states}`.`name`, GROUP_CONCAT(IF(`$var` = -1, '', IF( `{d3_labels}`.format = 'integer', FORMAT(`$var`, 0), $formatdouble)) ORDER BY `year` SEPARATOR ';') AS `vars`
+   FROM `$table`, `{d3_labels}`,`{d3_states}`  WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' AND `state` IN $stategroup AND `$table`.`state` = `{d3_states}`.`abbreviation` GROUP BY `state` ORDER BY `state`";
+  
+  $tablerows = db_query($query3)->fetchAll(PDO::FETCH_ASSOC);
+  
+   $totalstatecount = false;
+   $totalusfield = null;
+    if(in_array('US',$queryarray) && ($var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based and nonwork settings percentage rate' || $var == 'Facility-based nonwork percentage rate')) { $totalstatecount = true;
+    switch($var) {
+    case 'Community based nonwork percentage rate':
+    $totalusfield = "CBNW_US_Count";
+    $totalustext = "comm. based nonwork";
+    break;
+    case 'Facility-based work percentage rate':
+    $totalusfield = "FBW_US_Count";
+    $totalustext = "fac. based work";
+    break;
+  
+    case 'Facility-based and nonwork settings percentage rate':
+    $totalusfield = "FBWandNW_US_Count";
+    $totalustext = "fac. based and nonwork settings";
+    break;
+  
+    case 'Facility-based nonwork percentage rate':
+    $totalusfield = "FBNW_US_Count";
+    $totalustext = "fac. based nonwork";
+    break;
+  
+    default:
+    $totalusfield = "CBNW_US_Count";
+    $totalustext = "comm. based nonwork";
+    break;
+    }
+    $totalstatesquery =  "SELECT `{d3_states}`.`name`, GROUP_CONCAT(IF(`$totalusfield` = -1, '', FORMAT(`$totalusfield`, 0)) ORDER BY `year` SEPARATOR ';') AS `vars`
+    FROM `{d3_agency_mrdd}`,`{d3_states}`  WHERE `{d3_agency_mrdd}`.`STATE` = 'US' AND `sta_d3_agency_mrdd`.`STATE` = `{d3_states}`.`abbreviation`";
+    $ustotalrow = db_query($totalstatesquery)->fetchAll(PDO::FETCH_ASSOC);
+  
+    }
+  
+  $pagetitle = drupal_set_title($justfunctions->getAgency($stored['agency']) . $category_name);
+  
+  $repeatform = drupal_render(drupal_get_form('d3_statedata_dependent_dropdown'));
+  
+  
+  
+  
+  
+  $dbrow = array();
+  $dbrow2 = array();
+  $dbrow3 = array();
+  $sep	= '';
+  $dlData = $stategrab . ':';
+  foreach ($chartarray as $entry2) {
+  
+  $dbrow3[] =  array('year' =>  (string)$entry2[0]);
+  }
+  foreach ($chartarray as $entry) {
+  
+  $year = (string)$entry[0];
+  $rowarray = array();
+  $yearoff = array_shift($entry);
+  $countvals = count($entry);
+  array_unshift($entry, $year);
+  $dbrow [] = $entry;
+  
+  }
+  
+  foreach ($tablerows as $tablerow) {
+  $dbrow2[] = array('name' => $tablerow['name'],'vars' => $tablerow['vars']);
+  }
+  if($totalstatecount) $dbrow2[]= array('name' => "Number of U.S. states reporting count in $totalustext",'vars' => $ustotalrow[0]['vars']);
+  
+  
+  $charttable	.= "<br> Blank spaces that may appear on the chart or values of -1 indicate that data is not available for that year"
+        . "<br /><br /><table class=\"charttable\" border=\"1\" cellspacing=\"0\"><caption>" . $stategrab
+        . " $varLegend</caption><thead><th scope=\"row\">State</th>";  foreach($dbrow3 as $row3) { $charttable .= "<th>" . $row3['year'] . "</th>"; } $charttable .= "</tr></thead><tbody>"; foreach($dbrow2 as $row2) { $charttable .= "<tr><th>" . $row2['name'] . "</th><td>" . str_replace(array(';', '-1.00'), array('</td><td>', ' - - '), $row2['vars']) . "</td></tr>"; }
+         $charttable .= "</tbody></table>";
+  
+  
+  
+  // end values for multiple states
+  } else {
+  
+  // values for single state
+  $firstfunctions = new oldFunctions;
+  $category_name = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? ", " . $firstfunctions->getAgency($stored['category']) : "";
+  $formatdouble ="FORMAT(`$var`, 2)";
+  if ($var == 'REHABRAT' || $var == 'Perwork'|| $var == 'Integrated employment percentage rate' || $var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based nonwork percentage rate' || $var == 'Facility-based and nonwork settings percentage rate' || $var == 'IntEmp_Fund_percent') $formatdouble = "CONCAT(FORMAT((`$var` * 100), 1),'%')";
+   if ($var == 'unemployment rate' || $var == 'Below_Poverty') $formatdouble = "CONCAT(FORMAT(`$var`,2),'%')";
+  $query = "SELECT DISTINCT `year`, IF(`$var` = -1, -1,IF( `{d3_labels}`.format = 'integer', FORMAT(`$var`, 0), $formatdouble)) AS `var` FROM `$table` , `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' and  `state` = '$state' ORDER BY `year`";
+  
+  $totalstatecount = false;
+   $totalusfield = null;
+  if(($var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based nonwork percentage rate' || $var == 'Facility-based and nonwork settings percentage rate') && $state == 'US') {
+  $totalstatecount = true;
+  
+   switch($var) {
+   case 'Community based nonwork percentage rate':
+   $totalusfield = "CBNW_US_Count";
+   $totalustext = "comm. based nonwork";
+   break;
+   case 'Facility-based work percentage rate':
+   $totalusfield = "FBW_US_Count";
+   $totalustext = "fac. based work";
+   break;
+  
+   case 'Facility-based and nonwork settings percentage rate':
+   $totalusfield = "FBWandNW_US_Count";
+   $totalustext = "fac. based and nonwork settings";
+   break;
+  
+   case 'Facility-based nonwork percentage rate':
+   $totalusfield = "FBNW_US_Count";
+   $totalustext = "fac. based nonwork";
+   break;
+  
+   default:
+   $totalusfield = "CBNW_US_Count";
+   $totalustext = "comm. based nonwork";
+   break;
+   }
+  $statetotalquery = "SELECT DISTINCT `year`,  FORMAT(`$totalusfield`, 0) AS `var` FROM `sta_d3_agency_mrdd` WHERE `STATE` = 'US' ORDER BY `year`";
+  $totalstatefields = db_query($statetotalquery)->fetchAll(PDO::FETCH_ASSOC);
+  
+  
+  foreach ($totalstatefields as $entry) {
+  $year = $entry['year'];
+  
+  
+  $ustotaldbrow2 [] = array('year' => "$year", 'var' => $entry['var'] );
+  
+  }
+  
+  foreach ($ustotaldbrow2 as $row) {
+    if ($row['var'] ."" == "-1") {
+      $row['var'] = 0; }
+       if ($row['var'] ."" == "0") {
+         $row['var'] = " - - ";
+    }
+    $usdata['years']	.= $sep . $row['year'];
+    $usdata['var']	.= $sep . $row['var'];
+    $usdlData			.= $sep . $row['var'];
+    $sep 			= ';';
+     }
+  
+  
+  
+  }
+  
+  
+  $justfunctions = new oldFunctions;
+  $stategrab = $justfunctions->translateState($state);
+  $varLegend	=  $justfunctions->get_legend_name($table, $var);
+   $chartlegend = "<h3>State: " . $stategrab . "<br />$varLegend</h3>";
+  $pagetitle = drupal_set_title($justfunctions->getAgency($stored['agency']) . $category_name);
+  
+  $fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+  $query2 = "SELECT DISTINCT `short_name` from `{d3_labels}` where `column_name` IN ('$var')";
+  $label = db_query($query2)->fetchField();
+  
+  
+  
+  $repeatform = drupal_render(drupal_get_form('d3_statedata_dependent_dropdown'));
+  
+  
+  
+  
+  $dbrow = array();
+  $dbrow2 = array();
+  $statematch = array();
+  $sep	= '';
+  $dlData = $stategrab . ':';
+  foreach ($fields as $entry) {
+  $year = $entry['year'];
+  
+  $dbrow [] = array((string)$year, str_replace(',', '', str_replace('%','',$entry['var'])));
+  $dbrow2 [] = array('year' => "$year", 'var' => $entry['var'] );
+  }
+  
+  
+  $data	= array('years' => '', 'var' => '');
+  foreach ($dbrow2 as $row) {
+    if ($row['var'] ."" == "-1") {
+      $row['var'] = 0; }
+       if ($row['var'] ."" == "0") {
+         $row['var'] = " - - ";
+    }
+    $data['years']	.= $sep . $row['year'];
+    $data['var']	.= $sep . $row['var'];
+    $dlData			.= $sep . $row['var'];
+    $sep 			= ';';
+     }
+  
+  $charttable	.= "<br> Blank spaces that may appear on the chart or values of -1 indicate that data is not available for that year"
+        . "<br /><br /><table class=\"charttable\" border=\"1\" cellspacing=\"0\"><caption>" . $stategrab
+        . " $varLegend</caption><thead><tr><th scope=\"row\">&nbsp;</th><th>"
+        . str_replace(';', '</th><th>', $data['years']) . "</th></tr></thead><tbody><tr><th scope\"row\">$varLegend</th><td>"
+        . str_replace(array(';', '-1.00'), array('</td><td>', ' - '), $data['var']) . "</td></tr>" .
+           ($totalstatecount ? "<tr><th scope\"row\">Number of U.S. states reporting count in $totalustext</th><td>"
+        . str_replace(array(';', '-1.00'), array('</td><td>', ' - '), $usdata['var']) . "</td></tr>" : "")
+  
+        .   "</tbody></table>";
+  
+    // end values for single state
+    }
+    $recentblock = _d3_statedata_recent_searches($firstparameter);
+  
+    $charttable .= "<p></p><p><a href=\"/data/dlchart/$firstparameter\">Download the table above as a CSV file</a> (for use in Excel) | <a href=\"mailto:?subject=Statedata.info chart: " . $stategrab
+        . " $varLegend&body=Hello,%0A%0AI would like to share the following chart at statedata.info:  " . $GLOBALS['base_url'] . "%2Fdata%2Fshowchart%2F$firstparameter\">Email chart</a></p>";
+    $formbutton = '<div class="fancybox buildBut" rel="group" href="#formRedo"><span>Modify your chart or build a new one.</span></div>';
+  
+    $citation = "<div id=\"citation\"<p><strong>Suggested Citation:</strong> Statedata.info. (" . date('Y') . "). <em>$pagetitle. $stategrab: $varLegend.</em><br />Retrieved " . date("m/d/Y") . " from " . "http://" . $_SERVER['HTTP_HOST']  .  "/data/showchart/$firstparameter" . "</p></div>";
+  
+    $chart = array(
+      'id' => 'visualization',
+      'type' => 'StateData',
+      'legend' => (isset($stored['addstates']) ? $labelarray : array(
+        "$label"
+      )),
+      'formbutton' => $formbutton,
+      'rows' => $dbrow,
+      'chartlegend' => $chartlegend,
+      'charttable' => $charttable,
+      'recentblock' => $citation . $recentblock,
+      'repeatform' => $repeatform,
+    );
+  
+  return d3_draw($chart);
+  // print_r($dbrow);
+  }
+function d3_statedata_csvOut($firstparameter = '') {
+ ob_end_clean();
+ob_start();
+	$stored =   isset($_SESSION["vars" . $firstparameter]) ? $_SESSION["vars" . $firstparameter] : _d3_statedata_unserialize_stored($firstparameter);
+
+
+	$table = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? $stored['category'] : $stored['agency'];
+
+	$var = $stored['variables'];
+	$state = $stored['statechoice'];
+
+
+$formparam = isset($stored['form']) ? $stored['form'] : array();
+$formparam2 = isset($stored['form_state']) ? $stored['form_state'] : array();
+
+
+
+header("Pragma: cache");
+header("Content-Type: text/comma-separated-values");
+
+
+   if (isset($stored['addstates'])) {
+
+   // values for multiple states
+	$queryarray = array("$state");
+
+
+	 foreach($stored['addstates'] as $key => $value) {
+	 $queryarray[] = "$value"; }
+
+	sort($queryarray);
+	$stategroup =  "('" . implode("', '", $queryarray) . "')";
+
+	$firstfunctions = new oldFunctions;
+	$category_name = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? ", " . $firstfunctions->getAgency($stored['category']) : "";
+	$query =  "SELECT `year`, GROUP_CONCAT(IF(`$var` = -1, '', IF( `{d3_labels}`.format = 'integer', REPLACE(FORMAT(`$var`, 0),',',''), REPLACE(FORMAT(`$var`, 2),',',''))) ORDER BY `state` SEPARATOR ';') AS `vars`
+	FROM `$table`, `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' AND `state` IN $stategroup GROUP BY `year` ORDER BY `year`";
+
+
+
+
+	$fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+
+
+	$query2 = "SELECT `name` from `{d3_states}` where `abbreviation` IN $stategroup";
+	$label = db_query($query2)->fetchAll(PDO::FETCH_ASSOC);
+	$countrows = db_query($query2)->rowCount();
+	$labelarray = array();
+	foreach ($label as $statelabel) { $labelarray[] = $statelabel['name']; }
+	$justfunctions = new oldFunctions;
+	$stategrab = implode(', ',$labelarray);
+	$varLegend	=  $justfunctions->get_legend_name($table, $var);
+	 $chartlegend = "<h3>States: " . $stategrab . "<br />$varLegend</h3>";
+	 $query3 =  "SELECT `{d3_states}`.`name`, GROUP_CONCAT(IF(`$var` = -1, '', IF( `{d3_labels}`.format = 'integer', FORMAT(`$var`, 0), FORMAT(`$var`, 2))) ORDER BY `year` SEPARATOR ';') AS `vars`
+	 FROM `$table`, `{d3_labels}`,`{d3_states}`  WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' AND `state` IN $stategroup AND `$table`.`state` = `{d3_states}`.`abbreviation` GROUP BY `state` ORDER BY `state`";
+
+	$tablerows = db_query($query3)->fetchAll(PDO::FETCH_ASSOC);
+
+
+$totalstatecount = false;
+$totalusfield = null;
+ if(in_array('US',$queryarray) && ($var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based and nonwork settings percentage rate' || $var == 'Facility-based nonwork percentage rate')) { $totalstatecount = true;
+ switch($var) {
+ case 'Community based nonwork percentage rate':
+ $totalusfield = "CBNW_US_Count";
+ $totalustext = "comm. based nonwork";
+ break;
+ case 'Facility-based work percentage rate':
+ $totalusfield = "FBW_US_Count";
+ $totalustext = "fac. based work";
+ break;
+
+ case 'Facility-based and nonwork settings percentage rate':
+ $totalusfield = "FBWandNW_US_Count";
+ $totalustext = "fac. based and nonwork settings";
+ break;
+
+ case 'Facility-based nonwork percentage rate':
+ $totalusfield = "FBNW_US_Count";
+ $totalustext = "fac. based nonwork";
+ break;
+
+ default:
+ $totalusfield = "CBNW_US_Count";
+ $totalustext = "comm. based nonwork";
+ break;
+ }
+ $totalstatesquery =  "SELECT `{d3_states}`.`name`, GROUP_CONCAT(IF(`$totalusfield` = -1, '', FORMAT(`$totalusfield`, 0)) ORDER BY `year` SEPARATOR ';') AS `vars`
+ FROM `{d3_agency_mrdd}`,`{d3_states}`  WHERE `{d3_agency_mrdd}`.`STATE` = 'US' AND `sta_d3_agency_mrdd`.`STATE` = `{d3_states}`.`abbreviation`";
+ $ustotalrow = db_query($totalstatesquery)->fetchAll(PDO::FETCH_ASSOC);
+
+ }
+
+
+	$dbrow = array();
+	$dbrow2 = array();
+	$dbrow3 = array();
+	$sep	= '';
+	$dlData = $stategrab . ':';
+	foreach ($fields as $entry2) {
+	$dbrow3[] =  array('year' =>  (string)$entry2['year']);
+	}
+	foreach ($fields as $entry) {
+
+	$year = (string)$entry['year'];
+
+	$rowarray = array();
+	$countvars = $rowarray = explode(";",$entry['vars']);
+	$countvals = count($rowarray);
+	array_unshift($rowarray, $year);
+	$dbrow [] = $rowarray;
+
+	}
+
+	foreach ($tablerows as $tablerow) {
+	$dbrow2[] = array('name' => $tablerow['name'],'vars' => $tablerow['vars']);
+	}
+
+  	if($totalstatecount) $dbrow2[]= array('name' => 'Number of U.S. states reporting count in $totalustext','vars' => $ustotalrow[0]['vars']);
+
+  	$filename = str_replace(' ','_', $varLegend) . '.csv';
+  header('Content-Disposition: attachment; filename="' . $filename .'"');
+
+  ob_end_flush();
+$headstring = 'State';
+	foreach($dbrow3 as $row3) { $headstring .= "," . $row3['year']; } $headstring .= "\n";
+
+	print $headstring;
+	$i =0;
+	foreach($dbrow2 as $row2) { print "\"" . $row2['name'] . '","'  . str_replace(array(';', '-1.00'), array('","', ' - - '), $row2['vars']); $i = $i++; print $i < count($dbrow2) ? "\"\n" : "\""; }
+} else {
+
+
+   // values for single state
+
+
+
+   $firstfunctions = new oldFunctions;
+   $category_name = substr($stored['agency'],0,2) == 'AC' || substr($stored['agency'],0,2) == 'VR' ? ", " . $firstfunctions->getAgency($stored['category']) : "";
+   $query = "SELECT DISTINCT `year`, IF( `{d3_labels}`.format = 'integer', FORMAT(`$var`, 0), FORMAT(`$var`, 2)) AS `var` FROM `$table` , `{d3_labels}` WHERE `{d3_labels}`.column_name IN ('$var') and `{d3_labels}`.table_name = '$table' and  `state` = '$state' ORDER BY `year`";
+
+   $totalstatecount = false;
+    $totalusfield = null;
+   if(($var == 'Community based nonwork percentage rate' || $var == 'Facility-based work percentage rate' || $var == 'Facility-based and nonwork settings percentage rate' || $var == 'Facility-based nonwork percentage rate') && $state == 'US') {
+   $totalstatecount = true;
+
+    switch($var) {
+    case 'Community based nonwork percentage rate':
+    $totalusfield = "CBNW_US_Count";
+    $totalustext = "comm. based nonwork";
+    break;
+    case 'Facility-based work percentage rate':
+    $totalusfield = "FBW_US_Count";
+    $totalustext = "fac. based work";
+    break;
+
+    case 'Facility-based and nonwork settings percentage rate':
+    $totalusfield = "FBWandNW_US_Count";
+    $totalustext = "fac. based and nonwork settings";
+    break;
+
+    case 'Facility-based nonwork percentage rate':
+    $totalusfield = "FBNW_US_Count";
+    $totalustext = "fac. based nonwork";
+    break;
+
+    default:
+    $totalusfield = "CBNW_US_Count";
+    $totalustext = "comm. based nonwork";
+    break;
+    }
+     $statetotalquery = "SELECT DISTINCT `year`,  FORMAT(`$totalusfield`, 0) AS `var` FROM `sta_d3_agency_mrdd` , `{d3_labels}` WHERE `{d3_labels}`.column_name ='$totalusfield' and `state` = 'US' ORDER BY `year`";
+     $totalstatefields = db_query($statetotalquery)->fetchAll(PDO::FETCH_ASSOC);
+
+     foreach ($totalstatefields as $entry) {
+     $year = $entry['year'];
+
+
+     $ustotaldbrow2 [] = array('year' => "$year", 'var' => $entry['var'] );
+
+     }
+
+     foreach ($ustotaldbrow2 as $row) {
+     	if ($row['var'] ."" == "-1") {
+     		$row['var'] = 0; }
+        	if ($row['var'] ."" == "0") {
+        		$row['var'] = " - - ";
+     	}
+     	$usdata['years']	.= $sep . $row['year'];
+     	$usdata['var']	.= $sep . $row['var'];
+     	$usdlData			.= $sep . $row['var'];
+     	$sep 			= ';';
+        }
+
+
+
+     }
+
+   $justfunctions = new oldFunctions;
+   $stategrab = $justfunctions->translateState($state);
+   $varLegend	=  $justfunctions->get_legend_name($table, $var);
+    $chartlegend = "<h3>State: " . $stategrab . "<br />$varLegend</h3>";
+
+
+   $fields = db_query($query)->fetchAll(PDO::FETCH_ASSOC);
+   $query2 = "SELECT DISTINCT `description` from `{d3_labels}` where `column_name` IN ('$var')";
+   $label = db_query($query2)->fetchField();
+
+
+ $dbrow = array();
+   $dbrow2 = array();
+   $sep	= '';
+   $dlData = $stategrab . ':';
+   foreach ($fields as $entry) {
+   $year = $entry['year'];
+   $dbrow [] = array((string)$year, str_replace(',', '', $entry['var']));
+   $dbrow2 [] = array('year' => "$year", 'var' => $entry['var'] );
+   }
+
+
+   $data	= array('years' => '', 'var' => '');
+   foreach ($dbrow2 as $row) {
+   	if ($row['var'] ."" == "-1") {
+   		$row['var'] = 0; }
+      	if ($row['var'] ."" == "0") {
+      		$row['var'] = " - - ";
+   	}
+   	$data['years']	.= $sep . $row['year'];
+   	$data['var']	.= $sep . $row['var'];
+   	$dlData			.= $sep . $row['var'];
+   	$sep 			= ';';
+      }
+	$filename = str_replace(' ','_', $varLegend) . '.csv';
+header('Content-Disposition: attachment; filename="' . $filename .'"');
+
+ob_end_flush();
+   $csvoutput ="";
+   $csvoutput .= "$stategrab," .  str_replace(';', ',', $data['years']) . "\n";
+   $csvoutput .=	"$varLegend,\""
+   			. str_replace(array(';', '-1.00'), array('","', ' - '), $data['var']) . '"';$csvoutput .=	$totalstatecount ? "\n" . "Number of U.S. states reporting count in $totalustext,\""
+   			. str_replace(array(';', '-1.00'), array('","', ' - '), $usdata['var']) .'"' : "";
+            print $csvoutput;
+
+   }
+
+}
+/*function d3_statedata_block_info() {
+  // This hook returns an array, each component of which is an array of block
+  // information. The array keys are the 'delta' values used in other block
+  // hooks.
+
+  // The required block information is a block description, which is shown
+  // to the site administrator in the list of possible blocks. You can also
+  // provide initial settings for block weight, status, etc.
+
+  // Many options are defined in hook_block_info():
+
+
+  // This sample shows how to provide default settings. In this case we'll
+  // enable the block in the first sidebar and make it visible only on
+  // 'node/*' pages. See the hook_block_info() documentation for these.
+  $blocks['recent_charts'] = array(
+    'info' => t('Latest searches from users'),
+    'status' => TRUE,
+  );
+
+
+
+  return $blocks;
+}
+function d3_statedata_block_view() {
+  //The $delta parameter tells us which block is being requested.
+
+
+      $block['subject'] = t('Recent data searches');
+      // The content of the block is typically generated by calling a custom
+      // function.
+      $block['content'] = _d3_statedata_recent_nonuser();
+
+
+
+
+
+  return $block;
+}
+
+function d3_statedata_contents($which_block) {
+  switch ($which_block) {
+    case 'front_page_latest':
+      // Modules would typically perform some database queries to fetch the
+      // content for their blocks. Here, we'll just use the variable set in the
+      // block configuration or, if none has set, a default value.
+      // Block content can be returned in two formats: renderable arrays
+      // (as here) are preferred though a simple string will work as well.
+      // Block content created through the UI defaults to a string.
+      return _d3_statedata_recent_nonuser();
+
+  }
+} */

@@ -1,0 +1,29 @@
+name = Bootstrap Freelancer Content
+description = Bootstrap Freelancer Content
+core = 7.x
+package = Bootstrap Freelancer
+version = 7.x-1.0
+project = bootstrap_freelancer_content
+dependencies[] = bootstrap_freelancer_common
+dependencies[] = ctools
+dependencies[] = features
+dependencies[] = node_export_features
+dependencies[] = node_export_features
+dependencies[] = strongarm
+datestamp = 1425398892
+features[ctools][] = strongarm:strongarm:1
+features[features_api][] = api:2
+features[node_export_features][] = 36f867fd-da5c-4096-89fe-87dec291be34
+features[node_export_features][] = 4b341a96-2556-4ddf-ab84-5d9b4578532a
+features[node_export_features][] = 8039a2c0-f9c1-4111-bbb8-1c35149f201b
+features[node_export_features][] = 895386a2-0013-4221-913e-07d48897f430
+features[node_export_features][] = b4df5c72-a69d-4b7d-8414-8959e05e3efc
+features[node_export_features][] = e7b0911e-88b0-431c-a53d-c6a05b33a9d5
+project path = profiles/bootstrap_freelancer/modules/bootstrap_freelancer
+
+; Information added by Drupal.org packaging script on 2015-03-03
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "bootstrap_freelancer"
+datestamp = "1425410576"
+

@@ -1,0 +1,520 @@
+<?php
+
+/**
+ * @file
+ * The joomla module used for migrate Joomla to Drupal.
+ */
+define('JOOMLA_IMPORT_CONTENT', TRUE);
+define('JOOMLA_IMPORT_CATEGORIES', TRUE);
+define('JOOMLA_IMPORT_USERS', TRUE);
+define('JOOMLA_IMPORT_GROUPS', TRUE);
+define('JOOMLA_IMPORT_COMMENTS', FALSE);
+define('JOOMLA_DATABASE_HOST', 'localhost');
+define('JOOMLA_DATABASE_NAME', 'joomla');
+define('JOOMLA_DATABASE_USER', 'joomla');
+define('JOOMLA_DATABASE_PASS', FALSE);
+define('JOOMLA_DATABASE_PORT', 3306);
+define('JOOMLA_PREFIX', 'j25_');
+define('JOOMLA_PATH', FALSE);
+define('JOOMLA_INPUT_FORMAT', 'filtered_html');
+define('JOOMLA_UPDATE_DUPLICATE', FALSE);
+define('JOOMLA_IMG_FOLDER', 'images');
+define('JOOMLA_ENTITY_TYPE', 'node');
+define('JOOMLA_DEFAULT_STATIC_NODETYPE', 'page');
+define('JOOMLA_DEFAULT_BLOG_NODETYPE', 'article');
+define('JOOMLA_DEFAULT_CATEGORY_VOCABULARY', 'tags');
+define('JOOMLA_REAL_NAME_FIELD', FALSE);
+
+/**
+ * Implements hook_help().
+ */
+function joomla_help($section)
+{
+  switch ($section) {
+    case 'admin/help#joomla':
+      $output = "The joomla module used for migrate Joomla to Drupal.";
+      return $output;
+    case 'admin/modules#description':
+      return 'The joomla module used for migrate Joomla to Drupal.';
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function joomla_permission()
+{
+  return array('administer joomla' => array(
+    'description' => t('Access Joomla Import Settings'),
+    'title' => t('Administer Joomla'),
+    'restrict access' => TRUE,
+  ),
+  );
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function joomla_node_delete($node)
+{
+  db_delete('joomla_content')
+    ->condition('nid', $node->nid)
+    ->execute();
+}
+
+/**
+ * Implements hook_menu().
+ */
+function joomla_menu()
+{
+  $items = array();
+  $items['admin/content/joomla_import'] = array(
+    'title' => 'Import from Joomla',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('joomla_import_form'),
+    'access arguments' => array('administer joomla'),
+    'description' => 'Import content, categories and users from a Joomla website',
+    'type' => MENU_LOCAL_TASK | MENU_NORMAL_ITEM,
+  );
+  $items['admin/config/content/joomla'] = array(
+    'title' => 'Joomla to Drupal',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('joomla_admin_settings'),
+    'access arguments' => array('administer joomla'),
+    'description' => 'Migrate Joomla to Drupal.',
+  );
+  $items['admin/config/content/joomla/settings'] = array(
+    'title' => 'Settings',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  return $items;
+}
+
+/**
+ * Joomla admin settings.
+ */
+function joomla_admin_settings($form, &$form_state)
+{
+  // only administrators can access this function
+  $weight = -20;
+  $bundle = variable_get('joomla_default_static_nodetype', JOOMLA_DEFAULT_STATIC_NODETYPE);
+  // Generate the form - settings applying to all patterns first
+  $form['joomla_import_settings'] = array(
+    '#type' => 'fieldset',
+    '#weight' => $weight,
+    '#title' => t('Import defaults'),
+    '#collapsible' => FALSE,
+    '#collapsed' => FALSE,
+    '#description' => 'Set the default values for the ' . l('Import from Joomla', 'admin/content/joomla_import') . ' form',
+  );
+  $form['joomla_import_settings'][] = joomla_import_form_checkboxes();
+  $weight++;
+  $form['joomla_settings_database'] = array(
+    '#type' => 'fieldset',
+    '#weight' => $weight,
+    '#title' => t('Joomla settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE
+  );
+  $form['joomla_settings_database']['joomla_database_host'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Joomla database host name',
+    '#default_value' => variable_get('joomla_database_host', JOOMLA_DATABASE_HOST),
+    '#description' => 'Host name of Joomla database server.'
+  );
+  $form['joomla_settings_database']['joomla_database_name'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Joomla database name',
+    '#default_value' => variable_get('joomla_database_name', JOOMLA_DATABASE_NAME),
+    '#description' => 'Joomla database name.'
+  );
+  $form['joomla_settings_database']['joomla_database_user'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Joomla database user name',
+    '#default_value' => variable_get('joomla_database_user', JOOMLA_DATABASE_USER),
+    '#description' => 'User name for Joomla database server.'
+  );
+  $form['joomla_settings_database']['joomla_database_pass'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Joomla database password',
+    '#default_value' => variable_get('joomla_database_pass', JOOMLA_DATABASE_PASS),
+    '#description' => 'Password for Joomla database server.'
+  );
+  $form['joomla_settings_database']['advanced'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Advanced database settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE
+  );
+  $form['joomla_settings_database']['advanced']['joomla_database_port'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Joomla database port number',
+    '#default_value' => variable_get('joomla_database_port', JOOMLA_DATABASE_PORT),
+    '#description' => 'Port number for Joomla database server.  The default (3306) is usually fine.'
+  );
+  $form['joomla_settings_database']['advanced']['joomla_prefix'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Table Prefix of Joomla',
+    '#default_value' => variable_get('joomla_prefix', JOOMLA_PREFIX),
+    '#description' => 'Table Prefix for Joomla tables.'
+  );
+  $form['joomla_settings_database']['joomla_path'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Path of your Joomla installation',
+    '#default_value' => variable_get('joomla_path', JOOMLA_PATH),
+    '#description' => 'The path name where you install Joomla. Example:<br />'
+      . '<ul><li>Apache: <b>/home/YOUR_USERNAME/public_html/joomla</b></li>'
+      . '<li>Windows using WAMP: <b>c:/wamp/www/joomla</b></li>'
+      . '<li>Windows using IIS: <b>C:/Inetpub/wwwroot/joomla</b></li></ul>'
+  );
+  $weight++;
+  $form['joomla_settings_content'] = array(
+    '#type' => 'fieldset',
+    '#weight' => $weight,
+    '#title' => t('Content settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE
+  );
+  $filter_node_options = array();
+  foreach (node_type_get_types() as $key => $val) {
+    if (node_access('create', $key)) {
+      $filter_node_options[$key] = $val->name;
+    }
+  }
+  $form['joomla_settings_content']['joomla_default_static_nodetype'] = array(
+    '#type' => 'select',
+    '#title' => t('Default node type for static items'),
+    '#required' => TRUE,
+    '#options' => $filter_node_options,
+    '#default_value' => $bundle,
+  );
+  $form['joomla_settings_content']['joomla_default_blog_nodetype'] = array(
+    '#type' => 'select',
+    '#title' => t('Default node type for content items'),
+    '#required' => TRUE,
+    '#options' => $filter_node_options,
+    '#default_value' => variable_get('joomla_default_blog_nodetype', JOOMLA_DEFAULT_BLOG_NODETYPE),
+  );
+  $filter_category_options = array();
+  foreach (taxonomy_get_vocabularies() as $vocabulary) {
+    $filter_category_options[$vocabulary->vid] = $vocabulary->name;
+  }
+  $form['joomla_settings_content']['joomla_default_category_vocabulary'] = array(
+    '#type' => 'select',
+    '#title' => t('Default vocabulary for categories'),
+    '#required' => TRUE,
+    '#options' => $filter_category_options,
+    '#default_value' => variable_get('joomla_default_category_vocabulary', JOOMLA_DEFAULT_CATEGORY_VOCABULARY),
+  );
+  $node_fields = array();
+  foreach (field_info_instances('node', $bundle) as $field_name => $field) {
+    $node_fields[$field_name] = $field['label'];
+  }
+  foreach (taxonomy_get_vocabularies() as $vocabulary) {
+    $form['joomla_settings_content']['joomla_field_' . $vocabulary->machine_name] = array(
+      '#type' => 'select',
+      '#title' => t('Field to store @name associations', array('@name' => $vocabulary->name)),
+      '#options' => $node_fields,
+      '#empty_value' => FALSE,
+      '#default_value' => variable_get('joomla_field_' . $vocabulary->machine_name, JOOMLA_REAL_NAME_FIELD),
+    );
+  }
+  $lang_options = language_list();
+  $langs['und'] = 'None (undefined)';
+  foreach ($lang_options as $code => $lang) {
+    $langs[$code] = $lang->name;
+  }
+  $form['joomla_settings_content']['joomla_default_language'] = array(
+    '#type' => 'select',
+    '#title' => t('Language to import your content to'),
+    '#required' => TRUE,
+    '#options' => $langs,
+    '#default_value' => variable_get('joomla_default_language', LANGUAGE_NONE),
+  );
+  $formats = array();
+  foreach (filter_formats() as $key => $format) {
+    $formats[$key] = $format->name;
+  }
+  $form['joomla_settings_content']['joomla_input_format'] = array(
+    '#type' => 'select',
+    '#title' => t('Input Format'),
+    '#default_value' => variable_get('joomla_input_format', JOOMLA_INPUT_FORMAT),
+    '#options' => $formats,
+    '#description' => t('The filter format selected below will be applied to all imported content and comments.'),
+  );
+  $form['joomla_settings_content']['joomla_img_folder'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Image/Picture folder',
+    '#default_value' => variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER),
+    '#description' => "A folder to save any images from Joomla contents. This folder related to Drupal 'files' folder, i.e: if you enter '<b>images</b>' then all imported images will be save to Drupal '<b>files/images</b>'."
+  );
+  $weight++;
+  $form['joomla_settings_user'] = array(
+    '#type' => 'fieldset',
+    '#weight' => $weight,
+    '#title' => t('User settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+  $user_fields = array();
+  foreach (field_info_instances('user', 'user') as $field_name => $field) {
+    $user_fields[$field_name] = $field['label'];
+  }
+  $form['joomla_settings_user']['joomla_real_name_field'] = array(
+    '#type' => 'select',
+    '#title' => t('Field to use to import user Real Name to'),
+    '#options' => $user_fields,
+    '#empty_value' => FALSE,
+    '#default_value' => variable_get('joomla_real_name_field', JOOMLA_REAL_NAME_FIELD),
+  );
+  return system_settings_form($form);
+}
+
+/**
+ * Import form.
+ */
+function joomla_import_form($form, &$form_state)
+{
+  if (!joomla_database_test()) {
+    $form['error'] = array(
+      '#markup' => '<p>' . t('The joomla database settings are not currently valid. Please set the correct database settings at <a href="@url">Joomla to Drupal settings</a> page', array('@url' => url('admin/config/content/joomla'))) . '</p>',
+    );
+    return $form;
+  }
+  $form = joomla_import_form_checkboxes($form_state);
+  $form['joomla_update_submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Import'),
+  );
+  return $form;
+}
+
+/**
+ * These checkboxes are used on both the admin and import forms.
+ */
+function joomla_import_form_checkboxes(&$form_state = NULL)
+{
+  $form['joomla_import'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Items to import'),
+    '#collapsible' => FALSE,
+    '#collapsed' => FALSE,
+  );
+  $form['joomla_import']['joomla_import_content'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Import content'),
+    '#default_value' => variable_get('joomla_import_content', JOOMLA_IMPORT_CONTENT),
+  );
+  $form['joomla_import']['joomla_import_categories'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Import categories'),
+    '#default_value' => variable_get('joomla_import_categories', JOOMLA_IMPORT_CATEGORIES),
+  );
+  $form['joomla_import']['joomla_import_groups'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Import groups'),
+    '#default_value' => variable_get('joomla_import_groups', JOOMLA_IMPORT_GROUPS),
+  );
+  $form['joomla_import']['joomla_import_users'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Import users'),
+    '#default_value' => variable_get('joomla_import_users', JOOMLA_IMPORT_USERS),
+  );
+  $form['joomla_import']['joomla_import_comments'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Import comments'),
+    '#default_value' => variable_get('joomla_import_comments', JOOMLA_IMPORT_COMMENTS),
+    '#description' => t('Check this only if you use JComments in your joomla installation'),
+  );
+  $form['joomla_update_duplicate'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Update previously imported items?'),
+    '#description' => t('If selected, any items which have already been imported, and which have been updated on the Joomla website, will be updated.'),
+    '#default_value' => variable_get('joomla_update_duplicate', JOOMLA_UPDATE_DUPLICATE),
+  );
+  return $form;
+}
+
+/**
+ * Submit import form.
+ */
+function joomla_import_form_submit($form, &$form_state)
+{
+  $joomla_update_duplicate = (bool)$form_state['values']['joomla_update_duplicate'];
+  $jos = array();
+  $jos['users'] = (bool) $form_state['values']['joomla_import_users'];
+  $jos['groups'] = (bool) $form_state['values']['joomla_import_groups'];
+  $jos['comments'] = (bool) $form_state['values']['joomla_import_comments'];
+  $jos['categories'] = (bool) $form_state['values']['joomla_import_categories'];
+  $jos['content'] = (bool) $form_state['values']['joomla_import_content'];
+  $op = !empty($jos) ? array('joomla_batch_save', array($jos, $joomla_update_duplicate)) : NULL;
+  db_set_active();
+  $batch = array(
+    'title' => t('Importing'),
+    'operations' => array($op),
+    'progress_message' => t('Importing joomla content, please be patient...'),
+    'finished' => 'joomla_batch_finished',
+    'file' => drupal_get_path('module', 'joomla') . '/joomla.batch.inc',
+  );
+  batch_set($batch);
+}
+
+/**
+ *
+ */
+function joomla_replace_mos_image($images_source, $text_source)
+{
+  $joomla_img_folder = variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER);
+  $joomla_path = variable_get('joomla_path', JOOMLA_PATH);
+  $images = array();
+  $images = explode("\n", $images_source);
+  $image_string = '{mosimage}';
+  $n = 0;
+  $images_items = array();
+  while (!(strpos($text_source, $image_string) === FALSE)) {
+    $images_items = explode("|", $images[$n]);
+    if (!file_exists('public://' . $joomla_img_folder)) {
+      mkdir('public://' . $joomla_img_folder);
+    }
+    if (dirname($images_items[0])) {
+      if (!file_exists('public://' . $joomla_img_folder . '/' . dirname($images_items[0]))) {
+        mkdir('public://' . $joomla_img_folder . '/' . dirname($images_items[0]));
+      }
+    }
+    copy($joomla_path . '/images/stories/' . $images_items[0], "public://$joomla_img_folder/" . $images_items[0]);
+    $images_replace = '<img src="' . base_path() . variable_get('file_public_path', conf_path() . '/files') . "/$joomla_img_folder/{$images_items[0]}" . '"'
+      . ' align="' . $images_items[1] . '" title="' . $images_items[2] . '" alt="' . $images_items[2] . '"/>';
+    $text_source = substr_replace($text_source, $images_replace, strpos($text_source, $image_string), 10);
+    $n++;
+  }
+  return $text_source;
+}
+
+/**
+ *
+ */
+function joomla_replace_image_link($text_source)
+{
+  //Fixs image string: src="images/
+  $image_string = 'src="images/';
+  $images_replace = 'src="' . base_path() . variable_get('file_public_path', conf_path() . '/files/') . variable_get('joomla_img_folder', JOOMLA_IMG_FOLDER) . '/';
+  $text_result = str_replace('src="images/', "$images_replace", $text_source);
+  return $text_result;
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function joomla_form_alter(&$form, &$form_state, $form_id)
+{
+  if ($form_id == 'user_login' || $form_id == 'user_login_block') {
+    if (isset($form_state['input']['name'])) {
+      $last_validator = array_pop($form['#validate']);
+      $form['#validate'][] = 'joomla_login_validate';
+      $form['#validate'][] = $last_validator;
+    }
+  }
+}
+
+/**
+ *
+ */
+function joomla_login_validate($form, &$form_state)
+{
+  joomla_authenticate($form_state['values'], $form_state['uid']);
+}
+
+/**
+ *
+ */
+function joomla_authenticate($form_values = array(), &$form_uid)
+{
+  global $user;
+  if (!empty($user->uid) || $form_uid) {
+    // User has already sucessfully authenticated
+    return;
+  }
+  if (form_get_errors() || empty($form_values['name']) || empty($form_values['pass'])) {
+    return;
+  }
+  $account = user_load_by_name($form_values['name']);
+  // The user doesn't exist
+  if (!$account) {
+    return;
+  }
+  // See if the user has a password record from Joomla import
+  $joomla_user = db_query('SELECT * FROM {joomla_users} WHERE uid = :uid', array(':uid' => $account->uid))->fetch();
+  if (!$joomla_user) {
+    return;
+  }
+  /**
+   * If the password doesn't contain a colon, it is an unsalted password.
+   * It will have been inserted into the drupal users table during the
+   * import, and to get here the Drupal login must have already failed
+   * against it, so nothing left to do.
+   */
+  if (strpos($joomla_user->password, ':')) {
+    list($password, $salt) = explode(':', $joomla_user->password, 2);
+  } else {
+    $password = $joomla_user->password;
+    $salt = '';
+  }
+  // Check the supplied password against the md5sum
+  if (md5($form_values['pass'] . $salt) == $password || (!$salt && md5($form_values['pass']) == $password)) {
+    $user = $account;
+    watchdog('joomla', 'Converting password for user @name (Joomla id @juid)', array('@name' => $user->name, '@juid' => $joomla_user->juid));
+    // Update the users Drupal password
+    user_save($user, array('pass' => $form_values['pass']));
+    $joomla_user->converted = 1;
+    drupal_write_record('joomla_users', $joomla_user, array('uid'));
+    $form_uid = $user->uid;
+    user_login_finalize($form_values);
+    return $user;
+  }
+}
+
+/**
+ * Initialise settings for communicating with the Joomla database. This
+ * makes it possible to switch between the Drupal and Joomla databases with
+ * db_set_active().
+ */
+function joomla_database_init()
+{
+  $joomla_db = Database::getConnectionInfo('joomla');
+  if (empty($joomla_db)) {
+    /**
+     * It's not possible to use a combination of database engines, e.g.
+     * mysql and mysqli, at the same time.  So, determine which one is
+     * in use on the Drupal site and use it for the Joomla connection
+     */
+    $dbs = Database::getConnectionInfo('default');
+    // same engine for two db: Drupal's limit
+    $engine = $dbs['default']['driver'];
+    $joomla_url = array(
+      'database' => variable_get('joomla_database_name', JOOMLA_DATABASE_NAME),
+      'username' => variable_get('joomla_database_user', JOOMLA_DATABASE_USER),
+      'password' => variable_get('joomla_database_pass', JOOMLA_DATABASE_PASS),
+      'host' => variable_get('joomla_database_host', JOOMLA_DATABASE_HOST),
+      'port' => variable_get('joomla_database_port', JOOMLA_DATABASE_PORT),
+      'prefix' => 'j25_',
+      'driver' => $engine,
+    );
+    Database::addConnectionInfo('joomla', 'default', $joomla_url);
+  }
+}
+
+/**
+ * Test whether a valid joomla database has been configured.
+ */
+function joomla_database_test()
+{
+  $connection = @mysql_connect(variable_get('joomla_database_host', JOOMLA_DATABASE_HOST) . ':' . variable_get('joomla_database_port', JOOMLA_DATABASE_PORT), variable_get('joomla_database_user', JOOMLA_DATABASE_USER), variable_get('joomla_database_pass', JOOMLA_DATABASE_PASS), TRUE, 2);
+  if (!$connection) {
+    return FALSE;
+  }
+  if (!mysql_select_db(variable_get('joomla_database_name', JOOMLA_DATABASE_NAME))) {
+    return FALSE;
+  }
+  return TRUE;
+}

@@ -1,0 +1,7 @@
+name = Download data 
+description = Simple download to CSV module
+core = 7.x
+version = "7.x-1.x-dev"
+core = "7.x"
+datestamp = "1378299063"
+

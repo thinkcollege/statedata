@@ -1,0 +1,31 @@
+.navbar-inner {background-color:#3784B4;}
+.navbar-inner a {color:white;}
+h2 {padding-top:3em;}
+.navbar .dropdown-menu a {color:white;}
+.navbar a {
+color:white;
+}
+
+.navbar .nav > li > a, .navbar .dropdown-menu a {
+color: #fff;
+-webkit-border-radius: 3px;
+-moz-border-radius: 3px;
+border-radius: 3px;
+}
+
+/* ===== Primary Styles ========================================================
+   Author:
+   ========================================================================== */
+
+
+
+
+
+
+
+
+
+
+
+
+

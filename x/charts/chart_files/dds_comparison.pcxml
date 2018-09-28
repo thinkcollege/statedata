@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='ISO-8859-1' ?>
+<Chart Version='4.30.00' FitInBounds='False' Width='615' Height='395' CollisionProtection='False'>
+	<Graph Name='graph' Top='72' Left='55' Width='550' Height='283' Type='Bar' SubType='Horizontal'>
+		<Properties PercentSpaceBetweenBars='10' Effect='2D' BarStyle='Cylinder'/>
+		<DataLabels Font='Size:12;' />
+		<PopupText Font='Size:12;' FillColor='White'/>
+		<ValueScale Position='Left' PercentOverMaxValue='1' LowOuterLine='Color:#7f7f7f;'  HighOuterLine='Color:#7f7f7f;'  MajorTick='Color:#7f7f7f;'  MinorTick='Visible:False; Color:#b2b2b2; Size:Large;'  MajorGrid='Color:#7f7f7f;'  MinorGrid='Visible:False; Color:#b2b2b2;'  Font='Size:14; Style:Bold;' MinorFont='Size:10;'/>
+		<Legend Name='legend_graph' Top='350' Left='0' Width='615' Height='45' Anchor='MiddleCenter' ZIndex='1'>
+			<Properties  HJustification='Center' Font='Size:12; Style:Italic; Color:#656565;'/>
+		</Legend>
+		
+	</Graph>
+
+	<GraphData Name='graph' Method='Replace'>
+		<Categories>
+			<Category Name='1992'/>
+			<Category Name='1993'/>
+			<Category Name='1994'/>
+		</Categories>
+		<Series Name='Item 1'>
+			<Data Value='100'/>
+			<Data Value='130'/>
+			<Data Value='190'/>
+		</Series>
+	</GraphData>
+
+	<Project OutputType='Flash'>
+	</Project>
+
+</Chart>

@@ -1,0 +1,366 @@
+diff --git a/mappers/date.inc b/mappers/date.inc
+index c75f125..4eb3aab 100644
+--- a/mappers/date.inc
++++ b/mappers/date.inc
+@@ -2,26 +2,41 @@
+
+ /**
+  * @file
+- * On behalf implementation of Feeds mapping API for date
++ * On behalf implementation of Feeds mapping API for date.module.
+  */
+
+ /**
+  * Implements hook_feeds_processor_targets().
+- *
+- * @todo Only provides "end date" target if field allows it.
+  */
+ function date_feeds_processor_targets($entity_type, $bundle_name) {
+   $targets = array();
+
++  $field_types = array(
++    'date' => TRUE,
++    'datestamp' => TRUE,
++    'datetime' => TRUE,
++  );
++
+   foreach (field_info_instances($entity_type, $bundle_name) as $name => $instance) {
+     $info = field_info_field($name);
+-    if (in_array($info['type'], array('date', 'datestamp', 'datetime'))) {
+-      $targets[$name . ':start'] = array(
+-        'name' => t('@name: Start', array('@name' => $instance['label'])),
+-        'callback' => 'date_feeds_set_target',
+-        'description' => t('The start date for the @name field. Also use if mapping both start and end.', array('@name' => $instance['label'])),
+-        'real_target' => $name,
+-      );
++
++    if (!isset($field_types[$info['type']])) {
++      continue;
++    }
++
++    $targets[$name . ':start'] = array(
++      'name' => check_plain($instance['label']),
++      'callback' => 'date_feeds_set_target',
++      'description' => t('The start date for the @name field. Also use if mapping both start and end.', array('@name' => $instance['label'])),
++      'real_target' => $name,
++      'summary_callbacks' => array('date_feeds_summary_callback'),
++      'form_callbacks' => array('date_feeds_form_callback'),
++    );
++
++    if (!empty($info['settings']['todate'])) {
++      // Change the label for the start date.
++      $targets[$name . ':start']['name'] = t('@name: Start', array('@name' => $instance['label']));
++
+       $targets[$name . ':end'] = array(
+         'name' => t('@name: End', array('@name' => $instance['label'])),
+         'callback' => 'date_feeds_set_target',
+@@ -38,25 +53,141 @@ function date_feeds_processor_targets($entity_type, $bundle_name) {
+  * Callback for setting date values.
+  */
+ function date_feeds_set_target(FeedsSource $source, $entity, $target, array $values, array $mapping) {
+-  list($field_name, $sub_field) = explode(':', $target, 2);
++  list($target, $sub_field) = explode(':', $target, 2);
++
++  $value_key = $sub_field === 'start' ? 'value' : 'value2';
++  $offset_key = $sub_field === 'start' ? 'offset' : 'offset2';
++
++  $field = isset($entity->$target) ? $entity->$target : array(LANGUAGE_NONE => array());
++
++  $info = field_info_field($target);
++  $format = date_type_format($info['type']);
++
++  $db_tz = new DateTimeZone(date_get_timezone_db($info['settings']['tz_handling']));
++  $default_tz = new DateTimeZone(_date_feeds_get_default_timezone($mapping));
+
+   $delta = 0;
+   foreach ($values as $value) {
++    $value = _date_feeds_get_date_object($value, $default_tz);
+
+-    if (!($value instanceof FeedsDateTimeElement)) {
+-
+-      if (empty($value) || !is_numeric($value) && is_string($value) && !date_create($value)) {
+-        $value = new FeedsDateTimeElement(NULL, NULL);
+-      }
+-      elseif ($sub_field == 'end') {
+-        $value = new FeedsDateTimeElement(NULL, $value);
+-      }
+-      else {
+-        $value = new FeedsDateTimeElement($value, NULL);
++    if (!$value || !empty($value->errors)) {
++      $field[LANGUAGE_NONE][$delta][$value_key] = '';
++    }
++    else {
++      if (!isset($field[LANGUAGE_NONE][$delta]['timezone'])) {
++        $field[LANGUAGE_NONE][$delta]['timezone'] = $value->getTimezone()->getName();
+       }
++
++      $value->setTimezone($db_tz);
++
++      $field[LANGUAGE_NONE][$delta][$value_key] = $value->format($format, TRUE);
++      $field[LANGUAGE_NONE][$delta][$offset_key] = $value->getOffset();
+     }
+
+-    $value->buildDateField($entity, $field_name, $delta, $mapping['language']);
+     $delta++;
+   }
++
++  $entity->$target = $field;
++}
++
++/**
++ * Summary callback for date field targets.
++ */
++function date_feeds_summary_callback(array $mapping, $target, array $form, array $form_state) {
++  $mapping += array('timezone' => '__SITE__');
++
++  $options = _date_feeds_timezone_options();
++
++  return t('Default timezone: %zone', array('%zone' => $options[$mapping['timezone']]));
++}
++
++/**
++ * Form callback for date field targets.
++ */
++function date_feeds_form_callback(array $mapping, $target, array $form, array $form_state) {
++  $mapping += array('timezone' => '__SITE__');
++
++  return array(
++    'timezone' => array(
++      '#type' => 'select',
++      '#title' => t('Timezone handling'),
++      '#options' => _date_feeds_timezone_options(),
++      '#default_value' => $mapping['timezone'],
++      '#description' => t('This value will only be used if the timezone is mising.'),
++    ),
++  );
++}
++
++/**
++ * Returns the timezone options.
++ *
++ * @return array
++ *   A map of timezone options.
++ */
++function _date_feeds_timezone_options() {
++  return array(
++    '__SITE__' => t('Site default'),
++  ) + system_time_zones();
++}
++
++/**
++ * Returns the timezone to be used as the default.
++ *
++ * @param array $mapping
++ *   The mapping array.
++ *
++ * @return string
++ *   The timezone to use as the default.
++ */
++function _date_feeds_get_default_timezone(array $mapping) {
++  $mapping += array('timezone' => '__SITE__');
++
++  if ($mapping['timezone'] === '__SITE__') {
++    return variable_get('date_default_timezone', 'UTC');
++  }
++
++  return $mapping['timezone'];
++}
++
++/**
++ * Converts a date string or object into a DateObject.
++ *
++ * @param DateTime|string|int $value
++ *   The date value or object.
++ * @param DateTimeZone $default_tz
++ *   The default timezone.
++ *
++ * @return DateObject
++ *   The converted DateObject.
++ */
++function _date_feeds_get_date_object($value, DateTimeZone $default_tz) {
++  if ($value instanceof DateObject) {
++    return $value;
++  }
++
++  // Convert DateTime and FeedsDateTime.
++  if ($value instanceof DateTime) {
++    if (!$value->getTimezone() || !preg_match('/[a-zA-Z]/', $value->getTimezone()->getName())) {
++      $value->setTimezone($default_tz);
++    }
++    return new DateObject($value->format(DATE_FORMAT_ISO), $value->getTimezone());
++  }
++
++  if (is_string($value) || is_object($value) && method_exists($value, '__toString')) {
++    $value = trim($value);
++  }
++
++  // Filter out meaningless values.
++  if (empty($value) || !is_string($value) && !is_int($value)) {
++    return FALSE;
++  }
++
++  // Support year values.
++  if ((string) $value === (string) (int) $value) {
++    if ($value >= variable_get('date_min_year', 100) && $value <= variable_get('date_max_year', 4000)) {
++      return new DateObject('January ' . $value, $default_tz);
++    }
++  }
++
++  return new DateObject($value, $default_tz);
+ }
+diff --git a/plugins/FeedsParser.inc b/plugins/FeedsParser.inc
+index 412888e..abed168 100644
+--- a/plugins/FeedsParser.inc
++++ b/plugins/FeedsParser.inc
+@@ -499,6 +499,8 @@ class FeedsEnclosure extends FeedsElement {
+
+ /**
+  * Defines a date element of a parsed result (including ranges, repeat).
++ *
++ * @deprecated This is no longer in use and will not be maintained.
+  */
+ class FeedsDateTimeElement extends FeedsElement {
+
+@@ -659,6 +661,8 @@ class FeedsDateTimeElement extends FeedsElement {
+  * class.
+  *
+  * @see FeedsDateTimeElement
++ *
++ * @deprecated Use DateObject instead.
+  */
+ class FeedsDateTime extends DateTime {
+   public $granularity = array();
+@@ -864,12 +868,16 @@ function feeds_to_unixtime($date, $default_value) {
+   if (is_numeric($date)) {
+     return $date;
+   }
+-  elseif (is_string($date) && !empty($date)) {
+-    $date = new FeedsDateTimeElement($date);
++
++  if ($date instanceof FeedsDateTimeElement) {
+     return $date->getValue();
+   }
+-  elseif ($date instanceof FeedsDateTimeElement) {
+-    return $date->getValue();
++
++  if (is_string($date) || is_object($date) && method_exists($date, '__toString')) {
++    if ($date_object = date_create(trim($date))) {
++      return $date_object->format('U');
++    }
+   }
++
+   return $default_value;
+ }
+diff --git a/tests/feeds_mapper_date.test b/tests/feeds_mapper_date.test
+index 7dd8cfa..78c75ec 100644
+--- a/tests/feeds_mapper_date.test
++++ b/tests/feeds_mapper_date.test
+@@ -37,11 +37,11 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+     $typename = $this->createContentType(array(), array(
+       'date' => 'date',
+       'datestamp' => 'datestamp',
+-      //'datetime' => 'datetime', // REMOVED because the field is broken ATM.
++      'datetime' => 'datetime',
+     ));
+
+     // Hack to get date fields to not round to every 15 minutes.
+-    foreach (array('date', 'datestamp') as $field) {
++    foreach (array('date', 'datestamp', 'datetime') as $field) {
+       $field = 'field_' . $field;
+       $edit = array(
+         'widget_type' => 'date_select',
+@@ -84,6 +84,10 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+         'source' => 'timestamp',
+         'target' => 'field_datestamp:start',
+       ),
++      4 => array(
++        'source' => 'timestamp',
++        'target' => 'field_datetime:start',
++      ),
+     ));
+
+     $edit = array(
+@@ -108,6 +112,7 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+       $this->drupalGet("node/$i/edit");
+       $this->assertNodeFieldValue('date', $values[$i-1]);
+       $this->assertNodeFieldValue('datestamp', $values[$i-1]);
++      $this->assertNodeFieldValue('datetime', $values[$i-1]);
+     }
+   }
+
+@@ -141,6 +146,7 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+       $edit = array(
+         'instance[widget][settings][increment]' => 1,
+         'field[settings][enddate_get]' => 1,
++        'instance[settings][default_value]' => 'blank',
+       );
+       $this->drupalPost('admin/structure/types/manage/' . $typename . '/fields/' . $field, $edit, 'Save settings');
+       $edit = array(
+@@ -210,11 +216,11 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+     );
+     for ($i = 1; $i <= 2; $i++) {
+       $this->drupalGet("node/$i/edit");
+-      $this->assertNodeFieldValue('date', $date_values[$i]['created']);
++      $this->assertFieldByName('field_date[und][0][value][date]', $date_values[$i]['created']);
+       $this->assertFieldByName('field_date[und][0][value2][date]', $date_values[$i]['end']);
+-      $this->assertNodeFieldValue('datestamp', $date_values[$i]['created']);
++      $this->assertFieldByName('field_datestamp[und][0][value][date]', $date_values[$i]['created']);
+       $this->assertFieldByName('field_datestamp[und][0][value2][date]', $date_values[$i]['end']);
+-      $this->assertNodeFieldValue('datetime', $date_values[$i]['created']);
++      $this->assertFieldByName('field_datetime[und][0][value][date]', $date_values[$i]['created']);
+       $this->assertFieldByName('field_datetime[und][0][value2][date]', $date_values[$i]['end']);
+     }
+
+@@ -225,12 +231,12 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+     // Check if all values were cleared out for both nodes.
+     for ($i = 1; $i <= 2; $i++) {
+       $this->drupalGet("node/$i/edit");
+-      $this->assertNoNodeFieldValue('date', $date_values[$i]['created']);
+-      $this->assertNoFieldByName('field_date[und][0][value2][date]', $date_values[$i]['end']);
+-      $this->assertNoNodeFieldValue('datestamp', $date_values[$i]['created']);
+-      $this->assertNoFieldByName('field_datestamp[und][0][value2][date]', $date_values[$i]['end']);
+-      $this->assertNoNodeFieldValue('datetime', $date_values[$i]['created']);
+-      $this->assertNoFieldByName('field_datetime[und][0][value2][date]', $date_values[$i]['end']);
++      $this->assertFieldByName('field_date[und][0][value][date]', '');
++      $this->assertFieldByName('field_date[und][0][value2][date]', '');
++      $this->assertFieldByName('field_datestamp[und][0][value][date]', '');
++      $this->assertFieldByName('field_datestamp[und][0][value2][date]', '');
++      $this->assertFieldByName('field_datetime[und][0][value][date]', '');
++      $this->assertFieldByName('field_datetime[und][0][value2][date]', '');
+       $this->drupalGet("node/$i");
+       $this->assertNoText('date_label');
+       $this->assertNoText('datestamp_label');
+@@ -242,11 +248,11 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+     $this->assertText('Updated 2 nodes');
+     for ($i = 1; $i <= 2; $i++) {
+       $this->drupalGet("node/$i/edit");
+-      $this->assertNodeFieldValue('date', $date_values[$i]['created']);
++      $this->assertFieldByName('field_date[und][0][value][date]', $date_values[$i]['created']);
+       $this->assertFieldByName('field_date[und][0][value2][date]', $date_values[$i]['end']);
+-      $this->assertNodeFieldValue('datestamp', $date_values[$i]['created']);
++      $this->assertFieldByName('field_datestamp[und][0][value][date]', $date_values[$i]['created']);
+       $this->assertFieldByName('field_datestamp[und][0][value2][date]', $date_values[$i]['end']);
+-      $this->assertNodeFieldValue('datetime', $date_values[$i]['created']);
++      $this->assertFieldByName('field_datetime[und][0][value][date]', $date_values[$i]['created']);
+       $this->assertFieldByName('field_datetime[und][0][value2][date]', $date_values[$i]['end']);
+     }
+
+@@ -256,12 +262,12 @@ class FeedsMapperDateTestCase extends FeedsMapperTestCase {
+
+     // Check if all values were cleared out for node 1.
+     $this->drupalGet('node/1/edit');
+-    $this->assertNoNodeFieldValue('date', $date_values[1]['created']);
+-    $this->assertNoFieldByName('field_date[und][0][value2][date]', $date_values[1]['end']);
+-    $this->assertNoNodeFieldValue('datestamp', $date_values[1]['created']);
+-    $this->assertNoFieldByName('field_datestamp[und][0][value2][date]', $date_values[1]['end']);
+-    $this->assertNoNodeFieldValue('datetime', $date_values[1]['created']);
+-    $this->assertNoFieldByName('field_datetime[und][0][value2][date]', $date_values[1]['end']);
++    $this->assertFieldByName('field_date[und][0][value2][date]', '');
++    $this->assertFieldByName('field_date[und][0][value2][date]', '');
++    $this->assertFieldByName('field_datestamp[und][0][value2][date]', '');
++    $this->assertFieldByName('field_datestamp[und][0][value2][date]', '');
++    $this->assertFieldByName('field_datetime[und][0][value2][date]', '');
++    $this->assertFieldByName('field_datetime[und][0][value2][date]', '');
+     // Check if labels for fields that should be cleared out are not shown.
+     $this->drupalGet('node/1');
+     $this->assertNoText('date_label');

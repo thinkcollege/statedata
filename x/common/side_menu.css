@@ -1,0 +1,61 @@
+	/*  Vertical nav */
+/* Thank's to Alistapart.com*/
+
+#side_menu {
+	position:absolute;
+	top:86px;
+	margin: 0px;
+	padding: 0px;
+	width:21em;
+	padding-top:0px;
+	border-right: 1px solid gray;
+	border-bottom: 1px solid gray;
+	z-index:99;
+}
+
+#side_menu ul {
+	width:21em;
+	border: 0px;
+	margin: 0px;
+	padding: 0px;
+	list-style-type: none;
+	text-align: right;
+}	
+
+
+#side_menu ul li {
+	background: #BACBDB;
+	color:  #5C656A;
+	text-align: right;
+	margin: 0px;
+	padding: 0px;
+	border-bottom: 1px solid;
+	display: block;
+}
+
+#side_menu ul li a {
+	background: #BACBDB;
+	color:  #5C656A;
+	text-decoration: none;
+	text-align: right;
+	padding:0px;
+	padding-right:.5em;
+	font-weight: normal;
+	line-height: 2em;
+	font-size:    12px;
+	voice-family: "\"}\"";
+	voice-family: inherit;
+	font-size:    small;
+}
+
+
+
+#side_menu ul li a:hover {
+	color: maroon;
+	background: #ccc;
+	}
+
+#side_menu a:active	{
+	background: #c60;
+	color: #fff;
+	}

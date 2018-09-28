@@ -1,0 +1,49 @@
+/*
+ * @file
+ * CSS for d3_statedata.
+ *
+ * See @link d3_statedata_dependent_dropdown_degrades @endlink for
+ * details on what this file does. It is not used in any other example.
+ */
+ 
+/* Hides the next button when not degrading to non-javascript browser */
+html.js .next-button { 
+  display: none; 
+}
+html div#dropdown-states-replace-show { display: block; }
+
+html div#dropdown-states-replace { display: none; }
+html.js div#dropdown-states-replace { display: block; }
+/* Makes the next/choose button align to the right of the select control */
+.form-item-dropdown-first, .form-item-question-type-select {
+  display: inline-block;
+}
+.form-item-radio-cols .help-block { margin-bottom: 23px; }
+.charttable td, .charttable th { padding: 5px 7px; }
+.charttable thead th { color: #fff; background-color:#004080; }
+g.ticks text { font-size: 1em; font-weight: bold; }
+.page-data-showchart g.bargroup { border-bottom: 3px #ccc solid; }
+.ajax-progress { font-size: 3em; color: #fff; display: block; width: 100%; height: 600px; position: absolute;   background: rgb(0, 0, 0); /* Fall-back for browsers that don't
+                                    support rgba */
+    background: rgba(0, 0, 0, .2); }
+    .charttable { background-color: #fff; margin-left: 0;}
+    .main-container, .col-sm-12 {overflow: visible; }
+    div#searchBloc { display: none; }
+    h3#slideBloc { width: 75%; color: #fff; background-color: #d66031; padding: 7px; font-size: 1.2em; background-image: url('slider_bg_open.png');  background-position: top right; background-repeat: no-repeat;}
+     h3#slideBloc.open {  background-image: url('slider_bg_closed.png'); }
+     g.tooltip { position: absolute; z-index: 1500; }
+     g.legend { z-index: 10; }
+     g.chart {z-index: 1000; }
+     #formRedo { width: 500px; }
+     .buildBut {position: relative; width: 200px; height: 98px; color: #393295; font-family: 'fira_sansmedium', sans-serif; font-size: 1em; background-image: url('build_button.png'); background-repeat: no-repeat; float: right; margin: 0 50% 0 0; cursor: pointer;}
+     .buildBut span {display: block;position: relative; width: 126px; margin: 0 0 0 72px; padding-top: 36px; }
+	  .resetBut {display:block; width: 120px; height: 35px; border-radius: 5px;margin-bottom: 25px;float: right; margin-right: 300px;  color: #fff; background-color: #FF9673; text-align: center;}
+	  .resetBut.first { margin-bottom: 0; margin-right: 100px; }
+   #formRedo #d3-statedata-dependent-dropdown { background-color: #F9F9F9; }
+ .page-data-showchart  .fancybox-wrap { background-color: #F9F9F9; border-radius: 4px; }
+.page-data-showchart .fancybox-skin {
+    box-shadow: none; }
+    @media screen and (min-width: 990px)    {
+      .page-data select[name="dropdown_states"].form-control, .page-data select[name="add_states[]"],  select[name="category_sel"].form-control {width: 45%; }
+      }
+      form#d3-statedata-dependent-dropdown {padding-bottom: 16px; }

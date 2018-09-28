@@ -1,0 +1,14 @@
+name = Joomla MyBlog import
+description = "This module is used for importing Joomla MyBlog categories into Drupal."
+
+dependencies[] = joomla
+core = 7.x
+
+configure = admin/config/content/joomla
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-2.x-dev"
+core = "7.x"
+project = "joomla"
+datestamp = "1380583874"
+

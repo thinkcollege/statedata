@@ -1,0 +1,7 @@
+* { margin-left: 0; }
+body {width: 100%; }
+.col-sm-12, body > .row { margin: 0 auto; width: 100%;}
+.main-container.container { margin: 0 auto; width: 90%; }
+#stateDropdown { display: none; }
+.page-statepages .printHeader { display: block; float: right; width: 180px; }
+.region-footer,.col-md-4 form {display: none;}

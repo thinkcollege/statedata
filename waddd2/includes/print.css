@@ -1,0 +1,19 @@
+* { margin:0; padding:0; }
+body { font-size:12pt; line-height:1em; /*width:8.5in;*/ }
+div#top, div#main { /*width:6.5in;*/ margin:0 auto; }
+div#top { background:0; font-size:1.5em; color:black; position:absolute; top:0; height:inherit; }
+div#main { position:absolute; left:0; top:3em; }
+div#main > h1 { font-size:1em; }
+
+/* Stuff Not to display */
+div#skip, p#save, a[href^="http://72.3.249.15:2001"], input, *.error { display:none; }
+div#side_menu { display:none; }
+
+.float-left { float:left; }
+.float-right { float:right; }
+.clear { clear:both; }
+.center { text-align:center; margin:0 auto; }
+*.float-left + *.float-left { margin-left:1em; }
+
+table { border-spacing:0; border-collapse:collapse; }
+table tbody tr td, table thead tr th { border:0.1em solid black; padding:0.2em; }
